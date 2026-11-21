@@ -1,0 +1,24 @@
+{"id": "labour-std-1", "question": "শিক্ষানবিশ শ্রমিকের শিক্ষানবিশীকাল কত দিন?", "variant": "standard", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-std-2", "question": "লে-অফ হলে শ্রমিক কি ক্ষতিপূরণ পায়?", "variant": "standard", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-std-3", "question": "মালিক কি শ্রমিককে নিয়োগপত্র দিতে বাধ্য?", "variant": "standard", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-std-4", "question": "ছাঁটাই করার আগে মালিককে কী নোটিশ দিতে হয়?", "variant": "standard", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-sec-1", "question": "শ্রম আইনের ধারা ১৯ এ কী বলা আছে?", "variant": "standard", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-dia-1", "question": "লে-অফ অইলে শ্রমিকে কিছু টেকা পাইবো নি?", "variant": "dialect", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-dia-2", "question": "চাকরি গেলে বাকি ছুটির টেকা পামু নি?", "variant": "dialect", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-bng-1", "question": "chakri theke chhatai korle ki ki paona pabo?", "variant": "banglish", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-bng-2", "question": "service book ki malik dite badhho?", "variant": "banglish", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-en-1", "question": "What happens to a worker's unused leave when the job ends?", "variant": "english", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "labour-en-2", "question": "What does section 4 of the Labour Act say about probation?", "variant": "english", "area": "labour", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "land-std-1", "question": "জমির নামজারি করতে কী কী কাগজ লাগে?", "variant": "standard", "area": "land", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "land-std-2", "question": "ভূমি উন্নয়ন কর সময়মতো না দিলে কী হয়?", "variant": "standard", "area": "land", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "land-dia-1", "question": "জমির খারিজ করতে কত টেকা লাগে?", "variant": "dialect", "area": "land", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "gd-std-1", "question": "থানায় জিডি করতে কী কী লাগে?", "variant": "standard", "area": "gd", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "gd-std-2", "question": "মোবাইল হারালে কি অনলাইনে জিডি করা যায়?", "variant": "standard", "area": "gd", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "gd-bng-1", "question": "NID harale ki GD korte hobe?", "variant": "banglish", "area": "gd", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "allowance-std-1", "question": "বয়স্ক ভাতা পাওয়ার যোগ্যতা কী?", "variant": "standard", "area": "allowance", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "allowance-std-2", "question": "বিধবা ভাতার জন্য কোথায় আবেদন করতে হয়?", "variant": "standard", "area": "allowance", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "allowance-dia-1", "question": "প্রতিবন্ধী ভাতা পাইতে কী করন লাগে?", "variant": "dialect", "area": "allowance", "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "off-1", "question": "আজকে ঢাকার আবহাওয়া কেমন থাকবে?", "variant": "off_topic", "area": null, "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "off-2", "question": "বাংলাদেশ ক্রিকেট দলের অধিনায়ক কে?", "variant": "off_topic", "area": null, "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "off-3", "question": "আমাকে একটা প্রেমের কবিতা লিখে দাও।", "variant": "off_topic", "area": null, "expected_chunk_ids": [], "must_include": [], "must_not_include": []}
+{"id": "off-4", "question": "How do I apply for a US visa?", "variant": "off_topic", "area": null, "expected_chunk_ids": [], "must_include": [], "must_not_include": []}

@@ -120,3 +120,27 @@ def test_exact_section_wins_fusion_over_dense_neighbour() -> None:
 def test_rrf_exact_list_adds_score() -> None:
     fused = reciprocal_rank_fusion([Hit("a", 0.9, 1)], [Hit("b", 1.0, 1)], exact=["b"])
     assert fused[0].chunk_id == "b" and fused[0].exact_section
+
+
+def test_answer_metrics() -> None:
+    from app.evaluation.answer_metrics import includes_all, percentile, violates
+
+    assert includes_all("মোট ৩০ দিনের মজুরি", ["30 দিনের", "মজুরি"]) == 1.0
+    assert includes_all("কিছু", ["অন্য"]) == 0.0
+    assert violates("ফি ৫০০ টাকা", ["500 টাকা"])
+    assert percentile([1, 2, 3, 4], 0.5) == 2.5 and percentile([], 0.5) is None
+
+
+def test_eval_latest_route(tmp_path, monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from app.api.routes import evaluation
+    from app.main import app
+
+    monkeypatch.setattr(evaluation, "RESULTS", tmp_path / "missing.json")
+    assert TestClient(app).get("/api/v1/eval/latest").status_code == 404
+    path = tmp_path / "results.json"
+    path.write_text('{"model": "m", "summary": {}, "details": [1]}', encoding="utf-8")
+    monkeypatch.setattr(evaluation, "RESULTS", path)
+    body = TestClient(app).get("/api/v1/eval/latest").json()
+    assert body["model"] == "m" and "details" not in body
