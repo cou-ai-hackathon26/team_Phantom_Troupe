@@ -36,6 +36,8 @@ export type MicMode = "speech" | "recorder" | "none";
 export type MicState = "idle" | "listening" | "recording" | "transcribing";
 
 const MAX_RECORD_MS = 30_000;
+// Keep listening through the natural pauses of a spoken question; stop after this much silence.
+const SILENCE_STOP_MS = 2_500;
 const LANG_KEY = "adhikarai.voiceLang";
 // Browser recognizers write everything in the chosen language's script, so English speech under bn-BD
 // comes out as Bangla-script phonetics: the user picks the language they will speak.
@@ -79,7 +81,11 @@ export function useSpeechInput(onFinal: (text: string) => void) {
 
   const recognition = useRef<SpeechRecognitionLike | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
-  const timers = useRef<{ stop?: ReturnType<typeof setTimeout>; tick?: ReturnType<typeof setInterval> }>({});
+  const timers = useRef<{
+    stop?: ReturnType<typeof setTimeout>;
+    max?: ReturnType<typeof setTimeout>;
+    tick?: ReturnType<typeof setInterval>;
+  }>({});
   const finalText = useRef("");
   const onFinalRef = useRef(onFinal);
   onFinalRef.current = onFinal;
@@ -114,6 +120,7 @@ export function useSpeechInput(onFinal: (text: string) => void) {
 
   const clearTimers = () => {
     if (timers.current.stop) clearTimeout(timers.current.stop);
+    if (timers.current.max) clearTimeout(timers.current.max);
     if (timers.current.tick) clearInterval(timers.current.tick);
     timers.current = {};
   };
@@ -124,25 +131,33 @@ export function useSpeechInput(onFinal: (text: string) => void) {
     const rec = new Ctor();
     rec.lang = BROWSER_LANG[langRef.current];
     rec.interimResults = true;
-    rec.continuous = false; // one question
+    // continuous: with `false`, Chrome ends at the first short pause and cuts the question off
+    rec.continuous = true;
     rec.maxAlternatives = 1;
     finalText.current = "";
+    const armSilenceStop = () => {
+      if (timers.current.stop) clearTimeout(timers.current.stop);
+      timers.current.stop = setTimeout(() => rec.stop(), SILENCE_STOP_MS);
+    };
     rec.onresult = (e) => {
       let interimText = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalText.current += r[0].transcript;
-        else interimText += r[0].transcript;
+        const piece = r[0].transcript.trim();
+        if (r.isFinal) finalText.current = [finalText.current, piece].filter(Boolean).join(" ");
+        else interimText += ` ${piece}`;
       }
-      setInterim((finalText.current + " " + interimText).trim());
+      setInterim((finalText.current + interimText).trim());
+      armSilenceStop(); // speech is still coming: push the auto-stop back
     };
     rec.onerror = (e) => {
       if (e.error === "aborted") return;
+      // stay on the browser recognizer: Whisper (the recorder path) is weaker for Bangla and needs
+      // the internet just the same, so a network hiccup is retried here on the next tap
       setError(SPEECH_ERRORS[e.error] ?? "ভয়েস চিনতে সমস্যা হয়েছে। আবার বলুন অথবা প্রশ্নটি লিখুন।");
-      // Chrome's recognizer needs Google's servers; if they fail, use our Whisper fallback next time.
-      if (e.error === "network" && typeof MediaRecorder !== "undefined") setMode("recorder");
     };
     rec.onend = () => {
+      clearTimers();
       setState("idle");
       setInterim("");
       const text = finalText.current.trim();
@@ -152,6 +167,7 @@ export function useSpeechInput(onFinal: (text: string) => void) {
     setError(null);
     setState("listening");
     rec.start();
+    timers.current.max = setTimeout(() => rec.stop(), MAX_RECORD_MS); // hard cap, like the recorder path
   }, []);
 
   const startRecorder = useCallback(async () => {
