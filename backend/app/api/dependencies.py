@@ -7,6 +7,7 @@ from app.models.llm_client import get_llm_client
 from app.services.answer_cache import get_answer_cache
 from app.services.orchestrator import Orchestrator
 from app.services.retrieval_service import Retriever, get_retriever
+from app.services.web_search import get_web_search
 
 INDEX_MISSING_TEXT = "নথির সূচি এখনো তৈরি হয়নি। আগে ingestion চালান।"
 
@@ -20,7 +21,7 @@ def retriever_dep() -> Retriever:
 
 @lru_cache
 def _orchestrator() -> Orchestrator:
-    return Orchestrator(get_retriever(), get_llm_client(), get_answer_cache())
+    return Orchestrator(get_retriever(), get_llm_client(), get_answer_cache(), web=get_web_search())
 
 
 def orchestrator_dep() -> Orchestrator:

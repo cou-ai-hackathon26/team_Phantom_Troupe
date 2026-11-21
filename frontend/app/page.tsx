@@ -128,6 +128,11 @@ export default function ChatPage() {
       setSource({ marker: c.marker, citation: c.citation, title: c.title, text: c.excerpt, notes: [], sourceUrl: null, personal: true });
       return;
     }
+    if (c.kind === "web") {
+      // found by the web fallback: not in the knowledge base, so show the fetched passage and the link
+      setSource({ marker: c.marker, citation: c.citation, title: c.title, text: c.excerpt, notes: [], sourceUrl: c.source_url, web: true });
+      return;
+    }
     const base: SourceView = {
       marker: c.marker,
       citation: c.citation,

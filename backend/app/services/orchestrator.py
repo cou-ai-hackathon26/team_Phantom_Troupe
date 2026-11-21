@@ -15,14 +15,17 @@ from app.models.llm_client import LLMBadOutput, LLMClient
 from app.schemas.chat import ChatRequest, ChatResponse, Trace, TraceCandidate
 from app.services.answer_cache import AnswerCache, cache_key
 from app.services.citation_validator import validate_answer
-from app.services.generation_service import generate_answer, label_chunks, label_user_passages
+from app.services.generation_service import generate_answer, label_chunks, label_user_passages, label_web_passages
 from app.services.query_log import record_query
 from app.services.query_normalizer import normalize_query
 from app.services.retrieval_service import RetrievalResult, Retriever, merge_results
 from app.services.trust_policy import pre_retrieval_gate, retrieval_gate
 from app.services.user_docs import UserDocStore, get_user_doc_store
+from app.services.web_search import WebSearchClient
 
 OFFICIAL_CHUNKS_WITH_USER_DOC = 3  # keep the prompt within free-tier token limits
+OFFICIAL_CHUNKS_WITH_WEB = 3  # local chunks kept next to web passages (token budget)
+WEB_WARNING = "এই উত্তরের কিছু অংশ সরকারি ওয়েবসাইট থেকে নেওয়া, যা আমাদের যাচাই করা নথিভান্ডারের বাইরে। লিংকে গিয়ে যাচাই করুন।"
 
 
 @dataclass
@@ -40,12 +43,18 @@ class _Run:
 
 class Orchestrator:
     def __init__(
-        self, retriever: Retriever, llm: LLMClient, cache: AnswerCache, user_docs: UserDocStore | None = None
+        self,
+        retriever: Retriever,
+        llm: LLMClient,
+        cache: AnswerCache,
+        user_docs: UserDocStore | None = None,
+        web: WebSearchClient | None = None,
     ) -> None:
         self.retriever = retriever
         self.llm = llm
         self.cache = cache
         self.user_docs = user_docs or get_user_doc_store()
+        self.web = web  # None: web fallback off (WEB_FALLBACK=false or no TAVILY_API_KEY)
 
     async def run(self, request: ChatRequest) -> ChatResponse:
         run = _Run(started=time.perf_counter())
@@ -82,6 +91,9 @@ class Orchestrator:
             wide = await self.retriever.retrieve(run.search, area=None)
             run.retrieval = merge_results(run.retrieval, wide, top_n=settings.fused_top_k, k=settings.rrf_k)
         gate = retrieval_gate(run.retrieval)
+        web_passages = await self._web_fallback(run, gate.decision)
+        if web_passages:
+            gate = type(gate)("continue", f"{gate.reason}+web")
         if gate.decision == "refuse" and not run.private:
             return await self._finish(
                 request, run, gate.reason, "refused", REFUSAL_TEXT, raw_key=raw_key, norm_key=norm_key
@@ -95,7 +107,11 @@ class Orchestrator:
             labelled: dict = label_chunks(official)
             labelled.update(label_user_passages(user_doc.id, user_doc.filename, user_doc.select(run.search)))
         else:
-            labelled = label_chunks(official)
+            labelled = label_chunks(official[:OFFICIAL_CHUNKS_WITH_WEB] if web_passages else official)
+        if web_passages:
+            if gate.reason.startswith(("low_score", "no_candidates")):
+                labelled = {}  # local chunks failed the score gate: only the web passages go in
+            labelled.update(label_web_passages(web_passages))
         try:
             result = await generate_answer(self.llm, run.normalized, labelled)
         except LLMBadOutput:
@@ -120,13 +136,26 @@ class Orchestrator:
             validation.status,
             validation.answer,
             citations=validation.citations,
-            warnings=validation.warnings,
+            warnings=validation.warnings
+            + ([WEB_WARNING] if any(c.kind == "web" for c in validation.citations) else []),
             raw_key=raw_key,
             norm_key=norm_key,
         )
         return response
 
     # ------------------------------------------------------------------ helpers
+    async def _web_fallback(self, run: _Run, gate_decision: str) -> list:
+        """Search official websites when local evidence is weak. Never for personal-document questions
+        (their text must not leave the server) or when a named section was matched exactly."""
+        if self.web is None or run.private or run.retrieval is None:
+            return []
+        if any(c.exact_section for c in run.retrieval.candidates):
+            return []
+        weak = gate_decision == "refuse" or run.retrieval.best_dense_score < settings.web_trigger_score
+        if not weak:
+            return []
+        return await self.web.search(run.search)
+
     def _trace(self, run: _Run) -> Trace:
         candidates: list[TraceCandidate] = []
         if run.retrieval is not None:

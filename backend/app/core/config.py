@@ -46,6 +46,18 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     bm25_path: Path = DATA_DIR / "index" / "bm25.pkl"
 
+    # Web fallback (Tavily): when local evidence is weak, search an allow-list of official sites.
+    tavily_api_key: SecretStr | None = None
+    web_fallback: bool = False  # switch off for offline demos or weak venue internet
+    web_trigger_score: float = 0.85  # search the web when the best local dense score is below this
+    web_max_results: int = 3
+    web_timeout_s: float = 8.0
+    # comma-separated hosts; a result is kept only if its host is one of these or a subdomain of one
+    web_allowed_domains: str = (
+        "bdlaws.minlaw.gov.bd,minland.gov.bd,land.gov.bd,mutation.land.gov.bd,dss.gov.bd,"
+        "police.gov.bd,gd.police.gov.bd,nhrc.org.bd,ugc.gov.bd,mole.gov.bd,dife.gov.bd,bangladesh.gov.bd"
+    )
+
     # OCR (local only)
     ocr_provider: str = "tesseract"
     ocr_second_engine: str = "easyocr"

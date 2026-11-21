@@ -89,7 +89,11 @@ export function AnswerCard({ response, onCite }: AnswerCardProps) {
                   <span
                     className={cn(
                       "mt-0.5 rounded-md px-1.5 text-sm font-semibold",
-                      c.kind === "user" ? "bg-status-clarify-bg text-status-clarify" : "bg-primary-soft text-primary",
+                      c.kind === "user"
+                        ? "bg-status-clarify-bg text-status-clarify"
+                        : c.kind === "web"
+                          ? "border border-dashed text-muted-foreground"
+                          : "bg-primary-soft text-primary",
                     )}
                   >
                     {toBnDigits(c.marker)}
@@ -98,6 +102,8 @@ export function AnswerCard({ response, onCite }: AnswerCardProps) {
                     <span className="font-semibold">{c.citation}</span>
                     {c.kind === "user" ? (
                       <span className="text-muted-foreground"> — আপনার নথি, সরকারি সূত্র নয়</span>
+                    ) : c.kind === "web" ? (
+                      <span className="text-muted-foreground"> — সরকারি ওয়েবসাইট, লিংকে যাচাই করুন</span>
                     ) : (
                       <span className="text-muted-foreground"> — {c.title}</span>
                     )}

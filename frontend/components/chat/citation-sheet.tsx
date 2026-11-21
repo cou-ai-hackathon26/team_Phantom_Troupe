@@ -14,6 +14,7 @@ export interface SourceView {
   sourceUrl: string | null;
   loading?: boolean;
   personal?: boolean; // passage from the user's own uploaded document
+  web?: boolean; // passage from an official website found by the web fallback
 }
 
 interface CitationSheetProps {
@@ -38,6 +39,9 @@ export function CitationSheet({ source, onOpenChange }: CitationSheetProps) {
                 {source.marker ? `সূত্র ${toBnDigits(source.marker)}` : "সূত্র"}
                 {source.personal && (
                   <span className="rounded-full bg-status-clarify-bg px-2 py-0.5 text-xs text-status-clarify">আপনার নথি</span>
+                )}
+                {source.web && (
+                  <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">সরকারি ওয়েবসাইট</span>
                 )}
               </p>
               <SheetTitle className="text-lg leading-snug">{source.citation}</SheetTitle>
@@ -66,7 +70,9 @@ export function CitationSheet({ source, onOpenChange }: CitationSheetProps) {
               <p className="mt-4 text-sm text-muted-foreground">
                 {source.personal
                   ? "এটি আপনার আপলোড করা নথি থেকে পড়া অংশ (সরকারি আইন নয়)। নথিটি সংরক্ষণ করা হয়নি।"
-                  : "এখানে নথির প্রাসঙ্গিক অংশ দেখানো হয়েছে। চূড়ান্ত নিশ্চয়তার জন্য মূল উৎস দেখুন।"}
+                  : source.web
+                    ? "এই অংশটি সরকারি ওয়েবসাইটে খুঁজে পাওয়া, আমাদের যাচাই করা নথিভান্ডারের বাইরে। নিচের লিংকে গিয়ে যাচাই করুন।"
+                    : "এখানে নথির প্রাসঙ্গিক অংশ দেখানো হয়েছে। চূড়ান্ত নিশ্চয়তার জন্য মূল উৎস দেখুন।"}
               </p>
             </div>
             {source.sourceUrl && (

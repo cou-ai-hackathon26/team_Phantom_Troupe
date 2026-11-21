@@ -22,6 +22,8 @@ Users type or speak standard Bangla, one regional dialect, Banglish or English. 
 
 It is defined once, as `REFUSAL_TEXT` in `backend/app/core/constants.py`. Never retype it elsewhere.
 
+**Web fallback (added 22 Nov, `WEB_FALLBACK`):** when local evidence is weak (score gate refuses, or best dense score below `WEB_TRIGGER_SCORE`), `services/web_search.py` searches Tavily, keeps only hosts in `WEB_ALLOWED_DOMAINS` (official sites), and Call 2 gets those passages as `[W…]` next to local `[C…]`. Still at most 2 LLM calls. Web citations have `kind: "web"`, a source URL and a "verify on the linked page" warning. Never used for personal-document questions; only Call 1's `search_query` is sent. Set `WEB_FALLBACK=false` for offline demos.
+
 Spec: `docs/pipeline.md` (architecture v1.2). Build plan and progress: `plan.md`. Where the two disagree, the rules in this file win (area codes, refusal text, the 2-call limit, Next.js).
 
 ## Stack (fixed, all free; never anything that needs a payment card)
@@ -36,6 +38,7 @@ Spec: `docs/pipeline.md` (architecture v1.2). Build plan and progress: `plan.md`
 - **OCR:** local only. Tesseract `ben+eng` first, then one local second engine (Surya, EasyOCR or PaddleOCR). Never send page images to a cloud API.
 - **PDF:** PyMuPDF, plus a converter from Bijoy/SutonnyMJ legacy fonts to Unicode.
 - **Frontend:** Next.js (App Router), TypeScript, Tailwind, shadcn/ui, with a Bangla font via `next/font`.
+- **Web search (fallback only):** Tavily REST API (free tier, `TAVILY_API_KEY`), called with `httpx`.
 - **Not used:** no TTS, and no Redis unless needed. Docker is optional; `infra/docker-compose.yml` has an `offline` profile with local Postgres and Qdrant.
 
 ## Hard rules

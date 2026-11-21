@@ -23,7 +23,7 @@ export interface ChatRequest {
 
 export interface Citation {
   marker: number;
-  kind: "official" | "user";
+  kind: "official" | "user" | "web"; // web = official website found by the web fallback
   chunk_id: string;
   act: string;
   section: string;

@@ -39,7 +39,9 @@ function Inline({ text, citations, onCite }: AnswerTextProps) {
             className={
               citation.kind === "user"
                 ? "mx-0.5 inline-flex -translate-y-1 items-center rounded-md bg-status-clarify-bg px-1.5 text-[0.8rem] font-semibold leading-5 text-status-clarify hover:opacity-80"
-                : "mx-0.5 inline-flex -translate-y-1 items-center rounded-md bg-primary-soft px-1.5 text-[0.8rem] font-semibold leading-5 text-primary hover:bg-primary hover:text-primary-foreground"
+                : citation.kind === "web"
+                  ? "mx-0.5 inline-flex -translate-y-1 items-center rounded-md border border-dashed px-1.5 text-[0.8rem] font-semibold leading-5 text-muted-foreground hover:bg-secondary"
+                  : "mx-0.5 inline-flex -translate-y-1 items-center rounded-md bg-primary-soft px-1.5 text-[0.8rem] font-semibold leading-5 text-primary hover:bg-primary hover:text-primary-foreground"
             }
             aria-label={`সূত্র ${part.slice(1, -1)}: ${citation.citation}`}
           >

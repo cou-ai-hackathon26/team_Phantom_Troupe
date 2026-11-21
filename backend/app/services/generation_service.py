@@ -50,25 +50,38 @@ def label_user_passages(doc_id: str, filename: str, passages) -> dict[str, UserP
     }
 
 
-def build_user_message(question: str, labelled: dict) -> str:  # noqa: ANN001 - ChunkRecord | UserPassageSource
-    official, personal = [], []
+def label_web_passages(passages) -> dict:  # noqa: ANN001 - list[WebPassageSource]
+    return {f"W{i}": p for i, p in enumerate(passages, start=1)}
+
+
+def build_user_message(question: str, labelled: dict) -> str:  # noqa: ANN001 - ChunkRecord | User/WebPassageSource
+    official, personal, web = [], [], []
     for label, chunk in labelled.items():
-        if getattr(chunk, "kind", "official") == "user":
+        kind = getattr(chunk, "kind", "official")
+        if kind == "user":
             personal.append(f"[{label}] {chunk.citation}\n{chunk.text}")
+        elif kind == "web":
+            web.append(f"[{label}] {chunk.citation} — {chunk.source_url}\n{chunk.text}")
         else:
             part = f" (অংশ {chunk.part})" if chunk.part else ""
             official.append(f"[{label}] {chunk.citation}{part} — {chunk.title}\n{chunk.text}")
     message = (
         f"প্রশ্ন: {question}\n\n<sources>\n" + ("\n\n".join(official) or "(কোনো সরকারি সূত্র পাওয়া যায়নি)") + "\n</sources>"
     )
+    if web:
+        message += "\n\n<web_sources>\n" + "\n\n".join(web) + "\n</web_sources>"
     if personal:
         message += "\n\n<user_document>\n" + "\n\n".join(personal) + "\n</user_document>"
     return message
 
 
 async def generate_answer(llm: LLMClient, question: str, labelled: dict) -> LLMResult[AnswerOutput]:  # noqa: ANN001
-    has_user_doc = any(getattr(c, "kind", "official") == "user" for c in labelled.values())
-    system = load_prompt("answer_bn") + ("\n\n" + load_prompt("answer_user_doc") if has_user_doc else "")
+    kinds = {getattr(c, "kind", "official") for c in labelled.values()}
+    system = load_prompt("answer_bn")
+    if "web" in kinds:
+        system += "\n\n" + load_prompt("answer_web")
+    if "user" in kinds:
+        system += "\n\n" + load_prompt("answer_user_doc")
     return await llm.complete_json(
         system,
         build_user_message(question, labelled),

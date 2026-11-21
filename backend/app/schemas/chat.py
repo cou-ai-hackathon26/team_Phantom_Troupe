@@ -14,7 +14,7 @@ class ChatRequest(BaseModel):
 
 class Citation(BaseModel):
     marker: int  # 1-based; shown as [১], [২] … in the answer text
-    kind: Literal["official", "user"] = "official"  # "user" = the user's own uploaded document
+    kind: Literal["official", "user", "web"] = "official"  # user = own uploaded document; web = official website
     chunk_id: str
     act: str
     section: str
