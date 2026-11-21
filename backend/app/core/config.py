@@ -54,7 +54,10 @@ class Settings(BaseSettings):
 
     health_check_timeout_s: float = 5.0
 
-    # Admin panel (knowledge management). Unset = admin endpoints disabled.
+    # Admin panel (knowledge management): admins log in with email + password (admin_users table).
+    # APP_SECRET_KEY signs login sessions; ADMIN_TOKEN is an optional extra key for scripts.
+    app_secret_key: SecretStr | None = None
+    admin_session_hours: int = 12
     admin_token: SecretStr | None = None
     max_upload_mb: int = 25
 
@@ -63,7 +66,14 @@ class Settings(BaseSettings):
     user_doc_max_count: int = 200
 
     @field_validator(
-        "database_url", "qdrant_url", "qdrant_api_key", "groq_api_key", "llm_model", "admin_token", mode="before"
+        "database_url",
+        "qdrant_url",
+        "qdrant_api_key",
+        "groq_api_key",
+        "llm_model",
+        "admin_token",
+        "app_secret_key",
+        mode="before",
     )
     @classmethod
     def _blank_is_unset(cls, value: object) -> object:

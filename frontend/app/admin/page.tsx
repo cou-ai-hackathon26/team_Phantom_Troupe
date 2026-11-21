@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ExternalLink, Eye, KeyRound, LoaderCircle, LogOut, Trash2, Upload, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, Eye, LoaderCircle, LockKeyhole, LogOut, Trash2, Upload, XCircle } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AREAS, areaLabel } from "@/lib/areas";
 import {
   ApiError,
   adminCheck,
+  adminLogin,
   adminDelete,
   adminDocument,
   adminDocuments,
@@ -41,7 +42,7 @@ const errorText = (e: unknown) => (e instanceof ApiError ? e.message : "কি�
 
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
-  const [info, setInfo] = useState<{ llm_model: string | null; embedding_model: string } | null>(null);
+  const [info, setInfo] = useState<AdminInfo | null>(null);
 
   useEffect(() => {
     const saved = readToken();
@@ -77,10 +78,15 @@ export default function AdminPage() {
   );
 }
 
-function Login({ onLogin }: { onLogin: (token: string, info: { llm_model: string | null; embedding_model: string }) => void }) {
-  const [value, setValue] = useState("");
+type AdminInfo = { email: string; llm_model: string | null; embedding_model: string };
+
+function Login({ onLogin }: { onLogin: (token: string, info: AdminInfo) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const field =
+    "w-full rounded-xl border bg-background px-3 py-2.5 outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25";
   return (
     <main className="mx-auto max-w-md px-4 py-16">
       <form
@@ -90,7 +96,8 @@ function Login({ onLogin }: { onLogin: (token: string, info: { llm_model: string
           setBusy(true);
           setError(null);
           try {
-            onLogin(value.trim(), await adminCheck(value.trim()));
+            const session = await adminLogin(email.trim(), password);
+            onLogin(session.token, await adminCheck(session.token));
           } catch (err) {
             setError(errorText(err));
           } finally {
@@ -99,31 +106,36 @@ function Login({ onLogin }: { onLogin: (token: string, info: { llm_model: string
         }}
       >
         <div className="flex items-center gap-2">
-          <KeyRound className="size-5 text-primary" aria-hidden />
-          <h1 className="text-xl font-semibold">অ্যাডমিন প্যানেল</h1>
+          <LockKeyhole className="size-5 text-primary" aria-hidden />
+          <h1 className="text-xl font-semibold">অ্যাডমিন লগইন</h1>
         </div>
-        <p className="text-sm text-muted-foreground">জ্ঞানভান্ডারের নথি দেখা, যোগ ও মোছার জন্য অ্যাডমিন টোকেন দিন (.env-এর ADMIN_TOKEN)।</p>
+        <p className="text-sm text-muted-foreground">জ্ঞানভান্ডারের নথি দেখা, যোগ ও মোছার জন্য অ্যাডমিন অ্যাকাউন্টে প্রবেশ করুন।</p>
         <label className="block space-y-1">
-          <span className="text-sm font-semibold">টোকেন</span>
+          <span className="text-sm font-semibold">ইমেইল</span>
+          <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} className={field} />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm font-semibold">পাসওয়ার্ড</span>
           <input
             type="password"
             autoComplete="current-password"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            className="w-full rounded-xl border bg-background px-3 py-2.5 outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={field}
           />
         </label>
         {error && (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-sm text-destructive" role="alert" data-testid="login-error">
             {error}
           </p>
         )}
         <button
           type="submit"
-          disabled={!value.trim() || busy}
+          disabled={!email.trim() || !password || busy}
           className="w-full rounded-xl bg-primary px-4 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
         >
-          {busy ? "যাচাই হচ্ছে…" : "প্রবেশ করুন"}
+          {busy ? "যাচাই হচ্ছে…" : "লগইন"}
         </button>
       </form>
     </main>
@@ -136,7 +148,7 @@ function Dashboard({
   onLogout,
 }: {
   token: string;
-  info: { llm_model: string | null; embedding_model: string } | null;
+  info: AdminInfo | null;
   onLogout: () => void;
 }) {
   const [docs, setDocs] = useState<AdminDocument[] | null>(null);
@@ -205,6 +217,7 @@ function Dashboard({
         <div>
           <h1 className="text-2xl font-semibold">অ্যাডমিন প্যানেল</h1>
           <p className="text-sm text-muted-foreground">
+            {info?.email && <span className="font-semibold text-foreground">{info.email} · </span>}
             জ্ঞানভান্ডার: {toBnDigits(totals.docs)}টি নথি, {toBnDigits(totals.chunks)}টি নথি-অংশ
             {info && ` · মডেল: ${info.llm_model ?? "LLM_MODEL সেট করা নেই"} · এমবেডিং: ${info.embedding_model}`}
           </p>

@@ -71,6 +71,7 @@ python scripts/eval_retrieval.py            # dense vs BM25 vs hybrid on retriev
 python scripts/test_llm_models.py openai/gpt-oss-20b --with-answer   # compare Groq models
 python scripts/run_eval.py                  # full pipeline on gold.jsonl -> data/evaluation/results.json
 python scripts/warmup.py                    # wake DBs, load e5, pre-cache docs/demo_script.md questions
+python scripts/create_admin.py you@example.com   # create admin / reset password (asks for it)
 python scripts/compare_ocr.py scan.pdf --pages 1-3
 ```
 
@@ -96,6 +97,6 @@ question ─► cache(raw) ─► Call 1 normalize/classify (query_normalizer) �
 - **Sources:** register new sources in `ingestion/area_map.py` (PDF folders) or via `ingest_pdf.py` (`data/sources_registry.json`, `data/sources_log.csv`, originals in `data/originals/<area>/`).
 - **Citations:** built from stored chunk metadata, never from LLM text.
 - **LLM:** `openai/gpt-oss-20b` won the comparison (correct dialect and Banglish normalization, faithful numbers). The free tier throttles at a few answers per minute (≈2.5k tokens per answer), so space out evaluation runs (`--sleep 15`) and rely on the cache and `warmup.py` for demos.
-- **Admin panel:** `/admin` (frontend) with `api/routes/admin.py`, guarded by `ADMIN_TOKEN` (`core/security.py`). `services/knowledge_admin.py` ingests uploads as background jobs, one at a time. Only the new document is embedded; BM25 is rebuilt and swapped in place via `Retriever.replace_index`; every change clears the answer cache. Built-in documents (`area_map.PDF_FOLDERS`) can't be deleted from the panel.
+- **Admin panel:** `/admin` (frontend) with `api/routes/admin.py`. Admins log in with email and password (`admin_users` table, scrypt hashes; `api/routes/admin_auth.py`) and get an HMAC session token signed with `APP_SECRET_KEY` (`core/security.py`). `ADMIN_TOKEN` is an optional static key. Create admins with `scripts/create_admin.py`; never put credentials in code or docs. `services/knowledge_admin.py` ingests uploads as background jobs, one at a time. Only the new document is embedded; BM25 is rebuilt and swapped in place via `Retriever.replace_index`; every change clears the answer cache. Built-in documents (`area_map.PDF_FOLDERS`) can't be deleted from the panel.
 - **Personal documents:** `/user-docs` plus `services/user_docs.py`. Kept in process memory only (TTL `USER_DOC_TTL_MINUTES`) and **never** embedded, indexed, cached, logged or written to disk. With `user_doc_id`, the orchestrator labels user passages `[U…]` next to official `[C…]`, skips the cache and the pre-answer refusals, and citations get `kind: "user"`.
 - **Data status:** only the Labour Act 2006 (preamble and §§1–20) is ingested, from 21 bdlaws PDFs in `data/Workers — Bangladesh Labour Act 2006/`. Land, GD and allowance questions are refused until their documents are added.

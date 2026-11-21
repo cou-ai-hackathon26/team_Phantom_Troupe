@@ -94,8 +94,16 @@ export const deleteUserDoc = (docId: string) =>
 // ---- admin (token in the Authorization header)
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
+export const adminLogin = (email: string, password: string) =>
+  request<{ token: string; email: string; expires_at: number }>("/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+
 export const adminCheck = (token: string) =>
-  request<{ ok: boolean; llm_model: string | null; embedding_model: string }>("/admin/check", { headers: auth(token) });
+  request<{ ok: boolean; email: string; llm_model: string | null; embedding_model: string }>("/admin/check", {
+    headers: auth(token),
+  });
 
 export const adminDocuments = (token: string) => request<AdminDocument[]>("/admin/documents", { headers: auth(token) });
 

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routes import admin, chat, evaluation, feedback, health, sources, user_docs, voice
+from app.api.routes import admin, admin_auth, chat, evaluation, feedback, health, sources, user_docs, voice
 from app.core.config import settings
 from app.core.logging import setup_logging
 
@@ -47,6 +47,7 @@ def create_app() -> FastAPI:
         feedback.router,
         evaluation.router,
         user_docs.router,
+        admin_auth.router,
         admin.router,
     ):
         app.include_router(router, prefix="/api/v1")

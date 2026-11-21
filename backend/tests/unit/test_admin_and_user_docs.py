@@ -97,9 +97,66 @@ def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 # ---------------------------------------------------------------- admin auth
-def test_admin_disabled_without_token(monkeypatch) -> None:
+def test_admin_requires_login(monkeypatch) -> None:
     monkeypatch.setattr(settings, "admin_token", None)
-    assert TestClient(app).get("/api/v1/admin/check").status_code == 503
+    assert TestClient(app).get("/api/v1/admin/check").status_code == 401
+
+
+def test_password_hashing() -> None:
+    from app.core.security import hash_password, verify_password
+
+    stored = hash_password("correct horse battery")
+    assert stored.startswith("scrypt$") and "correct" not in stored
+    assert verify_password("correct horse battery", stored)
+    assert not verify_password("wrong", stored)
+    assert not verify_password("x", "garbage")
+    assert hash_password("same") != hash_password("same")  # salted
+
+
+def test_session_tokens(monkeypatch) -> None:
+    from pydantic import SecretStr
+
+    from app.core import security
+
+    security._secret.cache_clear()
+    monkeypatch.setattr(settings, "app_secret_key", SecretStr("test-secret"))
+    try:
+        token, _ = security.create_session_token("a@b.c")
+        assert security.verify_session_token(token) == "a@b.c"
+        payload, sig = token.split(".")
+        assert security.verify_session_token(payload + "." + sig[:-2] + "xx") is None  # tampered
+        expired, _ = security.create_session_token("a@b.c", hours=-1)
+        assert security.verify_session_token(expired) is None
+    finally:
+        security._secret.cache_clear()
+
+
+def test_login_route_and_session_access(monkeypatch) -> None:
+    from pydantic import SecretStr
+
+    from app.core import security
+    from app.services import admin_users
+
+    security._secret.cache_clear()
+    monkeypatch.setattr(settings, "app_secret_key", SecretStr("test-secret"))
+    monkeypatch.setattr(settings, "database_url", SecretStr("postgresql://u:p@localhost/db"))
+    monkeypatch.setattr(settings, "admin_token", None)
+
+    async def fake_auth(email: str, password: str) -> bool:
+        return email.strip().lower() == "admin@example.com" and password == "s3cret-pass"
+
+    monkeypatch.setattr(admin_users, "authenticate", fake_auth)
+    client = TestClient(app)
+    try:
+        bad = client.post("/api/v1/admin/login", json={"email": "admin@example.com", "password": "nope"})
+        assert bad.status_code == 401 and bad.json()["detail"]["code"] == "bad_credentials"
+        ok = client.post("/api/v1/admin/login", json={"email": " Admin@Example.com ", "password": "s3cret-pass"})
+        assert ok.status_code == 200
+        token = ok.json()["token"]
+        check = client.get("/api/v1/admin/check", headers={"Authorization": f"Bearer {token}"})
+        assert check.status_code == 200 and check.json()["email"] == "admin@example.com"
+    finally:
+        security._secret.cache_clear()
 
 
 def test_admin_requires_correct_token(monkeypatch) -> None:

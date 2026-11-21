@@ -14,8 +14,8 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(requir
 
 
 @router.get("/check")
-async def check() -> dict[str, object]:
-    return {"ok": True, "llm_model": settings.llm_model, "embedding_model": settings.embedding_model}
+async def check(admin: str = Depends(require_admin)) -> dict[str, object]:
+    return {"ok": True, "email": admin, "llm_model": settings.llm_model, "embedding_model": settings.embedding_model}
 
 
 @router.get("/documents")

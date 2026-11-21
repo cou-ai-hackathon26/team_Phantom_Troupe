@@ -25,13 +25,14 @@ question (voice/text) ─► Call 1: normalize dialect/Banglish → standard Ban
 **One-time setup:**
 
 ```bash
-cp .env.example .env            # fill in DATABASE_URL, QDRANT_URL/KEY, GROQ_API_KEY, LLM_MODEL, ADMIN_TOKEN
+cp .env.example .env            # fill in DATABASE_URL, QDRANT_URL/KEY, GROQ_API_KEY, LLM_MODEL, APP_SECRET_KEY
 cd backend
 uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python scripts/check_connections.py    # expect OK for postgres, qdrant and groq
 .venv/bin/python scripts/convert_pdfs.py         # data/<folder>/*.pdf -> data/processed/*.jsonl
 .venv/bin/python scripts/create_tables.py        # Supabase tables (idempotent)
 .venv/bin/python scripts/ingest_jsonl.py         # Postgres + Qdrant + BM25 (idempotent)
+.venv/bin/python scripts/create_admin.py you@example.com   # admin account (asks for the password)
 cd ../frontend && npm install
 ```
 
@@ -47,7 +48,7 @@ cd frontend && npm run dev               # or for the demo: npm run build && npx
 
 Then open:
 - <http://localhost:3000> to ask questions by voice or text, and attach your own document with 📎
-- <http://localhost:3000/admin> to manage the knowledge base (sign in with `ADMIN_TOKEN` from `.env`)
+- <http://localhost:3000/admin> to manage the knowledge base (log in with an admin email and password)
 - <http://localhost:3000/sources> and <http://localhost:3000/about> for browsing documents and the evaluation results
 
 The frontend talks to `http://localhost:8000` by default. Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` if the API runs elsewhere, and add the UI's origin to `CORS_ORIGINS` in `.env`.
@@ -60,7 +61,7 @@ Requirements: Python 3.12 via [uv](https://docs.astral.sh/uv/), Node.js 22, ffmp
 - **Upload** an official PDF (text, old Bijoy font or scanned) or an image, with its area, official title, issuer and source URL. Ingestion runs in the background with live steps: original preserved with sha256, text extraction and OCR, chunking, local embedding, Qdrant, Postgres, then the BM25 index is swapped into the running API. The document is answerable immediately, and re-uploading the same document ID replaces the old version.
 - **Delete** a document: it's removed from Qdrant, Postgres, BM25 and the processed data. Built-in documents (registered in `area_map.py`) can't be deleted here.
 - Every change clears the answer cache, so earlier answers and refusals are recomputed.
-- Protected by `ADMIN_TOKEN` (`Authorization: Bearer …`). If `ADMIN_TOKEN` is unset, the admin API is disabled.
+- **Login:** admin accounts live in the `admin_users` table. Passwords are stored only as salted scrypt hashes, and there's no plain-text copy anywhere. Create an account or reset a password with `scripts/create_admin.py <email>`. Login returns a session token signed with `APP_SECRET_KEY`, valid for `ADMIN_SESSION_HOURS` (12 by default). If `APP_SECRET_KEY` is unset, sessions end whenever the API restarts. `ADMIN_TOKEN` is an optional static key for scripts.
 
 ## Personal documents (users)
 
@@ -80,7 +81,8 @@ On the chat screen, 📎 attaches a PDF or photo (deed, appointment letter, noti
 | `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `EMBEDDING_DEVICE` | local `intfloat/multilingual-e5-base`, 768 dims |
 | `RETRIEVAL_MIN_SCORE` | score gate (tune with `scripts/run_eval.py`) |
 | `OCR_PROVIDER`, `OCR_SECOND_ENGINE`, `OCR_DEVICE`, `OCR_MIN_CONFIDENCE` | local OCR only |
-| `ADMIN_TOKEN`, `MAX_UPLOAD_MB` | admin panel secret (long random string) and upload size limit |
+| `APP_SECRET_KEY`, `ADMIN_SESSION_HOURS` | signs admin login sessions (long random string); session length |
+| `ADMIN_TOKEN`, `MAX_UPLOAD_MB` | optional static admin key for scripts; upload size limit |
 | `USER_DOC_TTL_MINUTES` | how long a user's personal document stays in memory |
 | `NEXT_PUBLIC_API_URL` | in `frontend/.env.local`, default `http://localhost:8000` |
 
@@ -122,7 +124,8 @@ cd ../frontend && npm run lint && npm run build
 | GET | `/api/v1/sources`, `/sources/documents/{id}`, `/sources/{chunk_id}` | browse documents, sections, full text with amendment notes |
 | POST | `/api/v1/user-docs` | personal PDF or image → `{doc_id, filename, pages, methods, preview, expires_at}` (in memory only); pass `user_doc_id` to `/chat` |
 | DELETE | `/api/v1/user-docs/{doc_id}` | remove a personal document now |
-| GET/POST/DELETE | `/api/v1/admin/documents[/{id}]`, `/admin/jobs[/{id}]`, `/admin/check` | knowledge-base management (Bearer `ADMIN_TOKEN`) |
+| POST | `/api/v1/admin/login` | `{email, password}` → `{token, email, expires_at}` |
+| GET/POST/DELETE | `/api/v1/admin/documents[/{id}]`, `/admin/jobs[/{id}]`, `/admin/check` | knowledge-base management (Bearer session token) |
 | POST | `/api/v1/feedback` | `{query_log_id, rating: up\|down}` |
 | GET | `/api/v1/health`, `/api/v1/eval/latest` | service status; latest evaluation |
 

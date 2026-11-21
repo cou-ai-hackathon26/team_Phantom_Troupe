@@ -247,7 +247,9 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [x] Frontend: `/admin` (sign in, per-area summary, upload form, job progress, document list with view and delete); chat 📎 attach button, document chip, "আপনার নথি" citations and sheet; header admin link; mobile layout fixes
 - [x] Tests: 10 new (admin auth, upload → incremental index → delete with fakes, user-doc store and TTL, upload endpoint, private chat path, expired doc). 120 backend tests pass.
 - [x] Verified live in Chromium: wrong and right token; upload of a real bdlaws PDF → job done → visible → viewed → deleted (stores back to 55 = 55 = 55); a scanned image attached → Tesseract OCR → answer citing "আপনার নথি"; no page errors; 360 px without overflow
-- [ ] Set a long random `ADMIN_TOKEN` in `.env` (team)
+- [x] **Admin login with email and password** (team request): `admin_users` table with salted scrypt hashes, `POST /admin/login` → HMAC-signed session token (12 h), `scripts/create_admin.py` to create an admin or reset a password, login form on `/admin`. The first admin account was created in Supabase. Verified: wrong password → Bangla error; correct login → dashboard; session survives reload; logout works.
+- [ ] Set a long random `APP_SECRET_KEY` in `.env` so sessions survive API restarts (team)
+- [ ] Change the first admin's password after the hackathon (`scripts/create_admin.py <email>`)
 
 ---
 
