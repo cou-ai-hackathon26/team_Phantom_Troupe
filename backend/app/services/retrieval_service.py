@@ -186,10 +186,30 @@ class Retriever:
         hints = [h.chunk_id for h in dense_hits] + [h.chunk_id for h in raw_sparse]
         exact = self.exact_section_ids(query, area, hints) if mode != "dense" else []
         sparse_hits = self._merge_exact(raw_sparse, exact, sparse_k) if mode in ("hybrid", "bm25") else []
-        fused = reciprocal_rank_fusion(dense_hits, sparse_hits, k=settings.rrf_k, top_n=top_n, exact=exact)
+        pool = reciprocal_rank_fusion(dense_hits, sparse_hits, k=settings.rrf_k, top_n=top_n * 4, exact=exact)
+        fused = diversify(pool, self.chunks, top_n)
         return RetrievalResult(
             query=query, area=area, candidates=fused, chunks=self.chunks, dense=dense_hits, sparse=sparse_hits
         )
+
+
+def diversify(candidates: list[FusedCandidate], chunks: dict[str, ChunkRecord], top_n: int) -> list[FusedCandidate]:
+    """Keep at most one chunk per section title across different documents: ~70 university acts share
+    sections like "সংবিধি প্রণয়ন", and five near-identical copies would otherwise fill the top 5.
+    Parts of the same section (same document) and exact section matches are never dropped."""
+    picked: list[FusedCandidate] = []
+    seen: dict[str, str] = {}  # title -> document_id of the first chunk with it
+    for cand in candidates:
+        chunk = chunks.get(cand.chunk_id)
+        title = chunk.title.strip() if chunk else ""
+        if chunk and title and not cand.exact_section and seen.get(title, chunk.document_id) != chunk.document_id:
+            continue
+        if chunk and title:
+            seen.setdefault(title, chunk.document_id)
+        picked.append(cand)
+        if len(picked) == top_n:
+            break
+    return picked
 
 
 def merge_results(primary: RetrievalResult, wide: RetrievalResult, top_n: int, k: int = 60) -> RetrievalResult:
@@ -204,7 +224,7 @@ def merge_results(primary: RetrievalResult, wide: RetrievalResult, top_n: int, k
     return RetrievalResult(
         query=primary.query,
         area=primary.area,
-        candidates=[by_id[cid] for cid in order[:top_n]],
+        candidates=diversify([by_id[cid] for cid in order], primary.chunks, top_n),
         chunks=primary.chunks,
         dense=[*primary.dense, *wide.dense],
         sparse=[*primary.sparse, *wide.sparse],

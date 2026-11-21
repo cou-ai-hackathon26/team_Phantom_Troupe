@@ -43,6 +43,9 @@ Do this:
      for its rules: "X পাওয়ার যোগ্যতা, শর্ত ও আবেদন পদ্ধতি".
    - A "what should I do" question about a problem becomes a search for the procedure, e.g.
      "জাতীয় পরিচয়পত্র হারালে জিডি করার পদ্ধতি".
+   - Many older laws are in English. When the question is about an institution, office or programme, add its
+     English name once in parentheses, e.g. "বিশ্ববিদ্যালয় মঞ্জুরী কমিশন (University Grants Commission)",
+     "রাজধানী উন্নয়ন কর্তৃপক্ষ (RAJUK)", "পুলিশ (Police)".
    - Do not add facts, numbers, laws or section numbers that the user did not say.
 
 Reply with JSON only, exactly these keys:

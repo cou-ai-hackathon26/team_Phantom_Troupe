@@ -6,6 +6,7 @@ from title keywords (labour / land / gd / allowance), else `general`. Repealed a
 but their title is marked [রহিত] so answers never present them as current law.
 """
 
+import html
 import re
 import sqlite3
 from collections.abc import Iterator
@@ -45,6 +46,13 @@ _AREA_RULES: list[tuple[Area, re.Pattern[str]]] = [
 ]
 
 _LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_SUP = re.compile(r"<sup>.*?</sup>", re.DOTALL)  # footnote reference markers: "<sup><a href="#fn-2">2</a></sup>"
+_TAG = re.compile(r"<[^>]+>")
+_MD_ESCAPE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!>|])")  # "5\." -> "5."
+# 38 English acts are stored as one block; their sections start a paragraph: "\n\n5\. (1) The Commission…"
+_INLINE_SECTION = re.compile(r"(?m)^[ \t]*\[?([0-9]{1,3}[A-Z]?|[০-৯]{1,3}[ক-ঢ]?)\\?[.।][ \t]")
+ONE_BLOCK_MIN_CHARS = 3000
+ONE_BLOCK_MIN_SECTIONS = 3
 _SECTION_NO = re.compile(r"^\s*\[?([0-9০-৯]{1,4}[A-Za-zক-ঢ]?)\]?\s*[।.]")
 _REPEALED = "রহিত"
 
@@ -68,6 +76,10 @@ def area_for_title(title: str) -> Area:
 
 
 def clean_body(text: str) -> str:
+    text = _SUP.sub("", text)
+    text = _TAG.sub("", text)
+    text = html.unescape(text)
+    text = _MD_ESCAPE.sub(r"\1", text)
     text = _LINK.sub(r"\1", text)
     text = text.replace("**", "").replace("__", "")
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -77,6 +89,25 @@ def clean_body(text: str) -> str:
 def section_number(body: str) -> str | None:
     m = _SECTION_NO.match(body)
     return ascii_to_bn_digits(m.group(1)) if m else None
+
+
+def split_one_block(body: str) -> list[tuple[str | None, str]]:
+    """Split an act stored as a single block into (section number, text) pieces at paragraph-initial
+    "N." / "N।"; the text before the first section has number None. Returns [] when it does not look
+    like a sequence of sections (fewer than ONE_BLOCK_MIN_SECTIONS starts, or numbers not starting at 1)."""
+    starts = list(_INLINE_SECTION.finditer(body))
+    if len(starts) < ONE_BLOCK_MIN_SECTIONS or bn_to_ascii(starts[0].group(1)) not in ("1", "2"):
+        return []
+    pieces: list[tuple[str | None, str]] = []
+    if starts[0].start() > 0:
+        pieces.append((None, body[: starts[0].start()]))
+    for m, nxt in zip(starts, [*starts[1:], None], strict=True):
+        pieces.append((m.group(1), body[m.start() : nxt.start() if nxt else len(body)]))
+    return pieces
+
+
+def bn_to_ascii(number: str) -> str:
+    return number.translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789"))
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -114,6 +145,11 @@ def act_records(conn: sqlite3.Connection, act: SqliteAct, spec: DocumentSpec, so
     rows = conn.execute(
         "select section_number, heading, body, ordinal from sections where act_id = ? order by ordinal, id", (act.id,)
     ).fetchall()
+    if len(rows) <= 2 and rows and len(rows[0][2] or "") > ONE_BLOCK_MIN_CHARS:
+        pieces = split_one_block(rows[0][2] or "")
+        if pieces:  # the whole act was stored as its first "section": expand it into real sections
+            expanded = [(number, None, text, -1 if number is None else i) for i, (number, text) in enumerate(pieces)]
+            rows = [*expanded, *rows[1:]]
     records: list[SectionRecord] = []
     seen: set[str] = set()
     for i, (number, heading, body, ordinal) in enumerate(rows, start=1):

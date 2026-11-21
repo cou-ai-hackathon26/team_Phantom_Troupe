@@ -366,3 +366,32 @@ def test_unreadable_text_layer_flags_bijoy_and_symbol_fonts() -> None:
     assert not unreadable_text_layer("নমুনা বাক্য যেখানে অনেকগুলো সাধারণ বাংলা শব্দ আছে এবং আরও কিছু শব্দ রয়েছে")
     assert not unreadable_text_layer("The Sample Act applies to every sample holding described in this order")
     assert not unreadable_text_layer("১২৩ ৪৫৬ ৭৮৯")  # too few letters to judge
+
+
+def test_clean_body_strips_html_footnote_markup_and_escapes() -> None:
+    raw = 'Sample text<sup><a id="fnref-2" href="#fn-2">2</a></sup> continues.\n\n5\\. Next &amp; more'
+    assert sqlite_laws.clean_body(raw) == "Sample text continues.\n\n5. Next & more"
+
+
+def test_split_one_block_act_into_sections() -> None:
+    body = "Preamble words here.\n\n1\\. First sample section.\n\n2\\. Second sample section.\n\n3\\. Third one."
+    pieces = sqlite_laws.split_one_block(body)
+    assert [n for n, _ in pieces] == [None, "1", "2", "3"]
+    assert pieces[2][1].startswith("2\\. Second")
+    assert sqlite_laws.split_one_block("Only prose.\n\n7\\. A stray number.") == []
+
+
+def test_diversify_drops_same_titled_sections_of_other_acts() -> None:
+    from app.services.fusion_service import FusedCandidate
+    from app.services.retrieval_service import diversify
+
+    def ch(cid: str, doc: str, title: str) -> ChunkRecord:
+        c = _chunk(doc, "নমুনা", "১")
+        return c.model_copy(update={"id": cid, "title": title})
+
+    chunks = {c.id: c for c in [ch("a1", "act-a", "সংবিধি"), ch("b1", "act-b", "সংবিধি"), ch("a2", "act-a", "সংবিধি"),
+                                 ch("c1", "act-c", "অন্য শিরোনাম")]}  # fmt: skip
+    cands = [FusedCandidate(i, 0.0) for i in ("a1", "b1", "a2", "c1")]
+    assert [c.chunk_id for c in diversify(cands, chunks, 5)] == ["a1", "a2", "c1"]  # b1: same title, other act
+    exact = [FusedCandidate("a1", 0.0), FusedCandidate("b1", 0.0, exact_section=True)]
+    assert [c.chunk_id for c in diversify(exact, chunks, 5)] == ["a1", "b1"]  # exact matches are kept
