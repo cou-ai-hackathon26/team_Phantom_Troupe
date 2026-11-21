@@ -315,3 +315,13 @@ def test_merge_results_fuses_and_prefers_area_on_ties() -> None:
         "c",
         "b",
     ]  # a is in both lists; c (1st in wide) outranks b (2nd in area)
+
+
+def test_refusals_are_not_cached() -> None:
+    cache = MemoryCache()
+    llm = FakeLLM(IN_SCOPE, AnswerOutput(answer="", used_chunk_ids=[], found=False))
+    orch = make(llm, cache=cache)
+    assert ask(orch).status == "refused"
+    second = ask(orch)
+    assert second.status == "refused" and not second.cached
+    assert len(llm.calls) == 4  # both runs went through the pipeline again

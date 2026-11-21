@@ -183,7 +183,9 @@ class Orchestrator:
         )
         # cache the full response (incl. trace) so a cached answer can still show "how it was found"
         cacheable = response.model_dump(exclude={"latency_ms", "cached", "request_id"}) | {"trace": trace.model_dump()}
-        for key in (raw_key, norm_key):
+        # refusals are not cached: after new documents or a prompt fix the same question may be answerable,
+        # and a cached refusal would hide that (the answer cache is cleared on ingest, but not on code changes)
+        for key in (raw_key, norm_key) if status != "refused" else ():
             if key is not None:
                 await self.cache.set(key, cacheable)
         response.request_id = await record_query(
