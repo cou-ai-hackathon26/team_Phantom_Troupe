@@ -134,6 +134,40 @@ export interface DocumentSummary {
   chunk_count: number;
 }
 
+/** One page of a paginated list. */
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  page: number; // 1-based
+  page_size: number;
+  pages: number;
+}
+
+export interface DocumentPage extends Paged<DocumentSummary> {
+  counts: Record<string, number>; // area -> documents matching the search ("all" = every area)
+}
+
+export interface AdminTotals {
+  docs: number;
+  chunks: number;
+  uploaded: number;
+  chunks_by_area: Record<string, number>;
+  docs_by_area: Record<string, number>;
+}
+
+export interface AdminDocumentPage extends Paged<AdminDocument> {
+  totals: AdminTotals;
+}
+
+export interface AdminDocumentDetail {
+  document: AdminDocument;
+  sections: AdminSection[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export interface SectionSummary {
   section: string;
   title: string;

@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BookOpenText, ChevronDown, ExternalLink, LoaderCircle, Search, X } from "lucide-react";
 import { CitationSheet, type SourceView } from "@/components/chat/citation-sheet";
+import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { AREAS, areaLabel } from "@/lib/areas";
 import { ApiError, getChunk, getDocument, listSources } from "@/lib/api";
 import { toBnDigits } from "@/lib/bn";
-import type { DocumentDetail, DocumentSummary, SectionSummary } from "@/lib/types";
+import type { DocumentDetail, DocumentPage, DocumentSummary, SectionSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const PAGE = 30; // documents shown per "আরও দেখুন"
+const PAGE_SIZE = 20; // documents per page, fetched from the server
 
 function omit<T>(record: Record<string, T>, key: string): Record<string, T> {
   const copy = { ...record };
@@ -26,21 +28,40 @@ function sectionLabel(sec: SectionSummary): string {
 }
 
 export default function SourcesPage() {
-  const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
+  const [data, setData] = useState<DocumentPage | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [area, setArea] = useState<string>("all");
   const [query, setQuery] = useState("");
-  const [shown, setShown] = useState(PAGE);
+  const [page, setPage] = useState(1);
   const [open, setOpen] = useState<Record<string, DocumentDetail | "loading">>({});
   const [source, setSource] = useState<SourceView | null>(null);
+  const q = useDebouncedValue(query.trim(), 300);
 
+  useEffect(() => setPage(1), [area, q]);
+
+  // one page per request; a newer request cancels the one still in flight
   useEffect(() => {
-    listSources()
-      .then(setDocs)
-      .catch((e) => setError(e instanceof ApiError ? e.message : "নথির তালিকা আনা যায়নি।"));
-  }, []);
+    const ctrl = new AbortController();
+    setLoading(true);
+    listSources({ q, area: area === "all" ? undefined : area, page, pageSize: PAGE_SIZE }, { signal: ctrl.signal })
+      .then((res) => {
+        setData(res);
+        setError(null);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (ctrl.signal.aborted) return;
+        setError(e instanceof ApiError ? e.message : "নথির তালিকা আনা যায়নি।");
+        setLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [q, area, page]);
 
-  useEffect(() => setShown(PAGE), [area, query]);
+  const goTo = (n: number) => {
+    setPage(n);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const toggle = (docId: string) => {
     if (open[docId]) {
@@ -68,26 +89,8 @@ export default function SourcesPage() {
     }
   };
 
-  const q = query.trim().toLowerCase();
-  const sectionMatches = (detail: DocumentDetail) =>
-    q ? detail.sections.filter((s) => `${s.section} ${s.title} ${s.citation}`.toLowerCase().includes(q)) : detail.sections;
-
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: docs?.length ?? 0 };
-    for (const d of docs ?? []) c[d.area] = (c[d.area] ?? 0) + 1;
-    return c;
-  }, [docs]);
-
-  // a document matches by title or issuer; documents that are open stay visible to search inside them
-  const visible = useMemo(
-    () =>
-      (docs ?? []).filter(
-        (d) =>
-          (area === "all" || d.area === area) &&
-          (!q || `${d.title} ${d.issuer ?? ""}`.toLowerCase().includes(q) || Boolean(open[d.document_id])),
-      ),
-    [docs, area, q, open],
-  );
+  const counts = data?.counts ?? {};
+  const visible = data?.items ?? [];
 
   const filters = [{ id: "all", label: "সব" }, ...AREAS.map((a) => ({ id: a.id, label: a.label }))];
 
@@ -100,7 +103,7 @@ export default function SourcesPage() {
         <h1 className="text-2xl font-bold sm:text-3xl">নথিসমূহ</h1>
         <p className="text-muted-foreground">
           যে সরকারি আইন ও নথি থেকে অধিকারAI উত্তর দেয়
-          {docs ? ` (মোট ${toBnDigits(docs.length)}টি)` : ""}। নথি খুলে প্রতিটি ধারা বা অনুচ্ছেদের মূল লেখা দেখতে পারেন।
+          {data && !q && area === "all" ? ` (মোট ${toBnDigits(data.total)}টি)` : ""}। নথি খুলে প্রতিটি ধারা বা অনুচ্ছেদের মূল লেখা দেখতে পারেন।
         </p>
       </div>
 
@@ -141,7 +144,7 @@ export default function SourcesPage() {
               )}
             >
               {opt.label}
-              {docs && (
+              {data && (
                 <span
                   className={cn(
                     "rounded-full px-1.5 text-xs tabular-nums",
@@ -162,7 +165,7 @@ export default function SourcesPage() {
             {error}
           </p>
         )}
-        {!docs && !error && (
+        {!data && !error && (
           <ul className="space-y-3" aria-label="লোড হচ্ছে">
             {[0, 1, 2, 3].map((i) => (
               <li key={i} className="space-y-2 rounded-2xl border bg-card p-4">
@@ -174,16 +177,17 @@ export default function SourcesPage() {
           </ul>
         )}
 
-        {docs && (
-          <p className="text-sm text-muted-foreground" aria-live="polite">
-            {toBnDigits(visible.length)}টি নথি{q ? ` “${query.trim()}” মিলেছে` : ""}
+        {data && (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
+            {toBnDigits(data.total)}টি নথি{q ? ` “${q}” মিলেছে` : ""}
+            {loading && <LoaderCircle className="size-3.5 animate-spin" aria-label="লোড হচ্ছে" />}
           </p>
         )}
 
-        <ul className="space-y-3">
-          {visible.slice(0, shown).map((doc, i) => {
+        <ul className={cn("space-y-3 transition-opacity", loading && data && "opacity-60")}>
+          {visible.map((doc, i) => {
             const detail = open[doc.document_id];
-            const sections = detail && detail !== "loading" ? sectionMatches(detail) : [];
+            const sections = detail && detail !== "loading" ? detail.sections : [];
             return (
               <li
                 key={doc.document_id}
@@ -191,7 +195,7 @@ export default function SourcesPage() {
                   "animate-fade-up overflow-hidden rounded-2xl border bg-card transition-shadow",
                   detail ? "shadow-card ring-1 ring-primary/15" : "hover:shadow-card",
                 )}
-                style={{ animationDelay: `${Math.min(i % PAGE, 10) * 30}ms` }}
+                style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
               >
                 <button
                   type="button"
@@ -253,26 +257,24 @@ export default function SourcesPage() {
               </li>
             );
           })}
-          {docs && visible.length === 0 && (
+          {data && !loading && visible.length === 0 && (
             <li className="rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
               {q ? "এই নামে কোনো নথি পাওয়া যায়নি।" : "এই বিষয়ের নথি এখনো যুক্ত হয়নি।"}
             </li>
           )}
         </ul>
 
-        {visible.length > shown && (
-          <div className="flex flex-col items-center gap-1 pt-2">
-            <button
-              type="button"
-              onClick={() => setShown((n) => n + PAGE)}
-              className="rounded-full border bg-card px-6 py-2.5 font-medium shadow-card transition-all hover:border-primary/40 hover:text-primary active:scale-95"
-            >
-              আরও দেখুন
-            </button>
-            <span className="text-sm text-muted-foreground">
-              {toBnDigits(shown)} / {toBnDigits(visible.length)}
-            </span>
-          </div>
+        {data && (
+          <Pagination
+            page={data.page}
+            pages={data.pages}
+            total={data.total}
+            pageSize={data.page_size}
+            onPage={goTo}
+            disabled={loading}
+            unit="টি নথি"
+            className="pt-3"
+          />
         )}
       </div>
 

@@ -1,14 +1,17 @@
 """Admin panel API: knowledge-base documents (list, inspect, upload, delete) and ingestion jobs."""
 
+from collections import Counter
 from dataclasses import asdict
+from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
 from app.core.config import settings
 from app.core.constants import Area
 from app.core.security import require_admin
 from app.ingestion.upload_text import UnsupportedFile
 from app.services import knowledge_admin as ka
+from app.services.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, IndexCache, matches, paginate, search_key
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -18,19 +21,72 @@ async def check(admin: str = Depends(require_admin)) -> dict[str, object]:
     return {"ok": True, "email": admin, "llm_model": settings.llm_model, "embedding_model": settings.embedding_model}
 
 
+DocumentKind = Literal["all", "builtin", "uploaded"]
+
+# search text per document, rebuilt when the cached document list is (same list object until the index changes)
+_search_keys: IndexCache[dict[str, str]] = IndexCache()
+
+
 @router.get("/documents")
-async def documents() -> list[dict]:
-    return [asdict(d) for d in ka.list_documents()]
+async def documents(
+    q: str | None = Query(None, max_length=100),
+    area: Area | None = Query(None),
+    kind: DocumentKind = Query("all"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> dict:
+    """One page of knowledge-base documents, plus totals over the whole knowledge base for the dashboard."""
+    rows = ka.list_documents()
+    keys = _search_keys.get(rows, lambda: {r.document_id: search_key(r.title, r.issuer, r.document_id) for r in rows})
+    by_area: Counter[str] = Counter()
+    docs_by_area: Counter[str] = Counter()
+    for r in rows:
+        by_area[r.area] += r.chunks
+        docs_by_area[r.area] += 1
+    totals = {
+        "docs": len(rows),
+        "chunks": sum(r.chunks for r in rows),
+        "uploaded": sum(1 for r in rows if not r.builtin),
+        "chunks_by_area": dict(by_area),
+        "docs_by_area": dict(docs_by_area),
+    }
+    found = [
+        r
+        for r in rows
+        if (area is None or r.area == area)
+        and (kind == "all" or r.builtin == (kind == "builtin"))
+        and matches(q, keys[r.document_id])
+    ]
+    sliced = paginate(found, page, page_size)
+    return {
+        "items": [asdict(r) for r in sliced.items],
+        "total": sliced.total,
+        "page": sliced.page,
+        "page_size": sliced.page_size,
+        "pages": sliced.pages,
+        "totals": totals,
+    }
 
 
 @router.get("/documents/{document_id}")
-async def document(document_id: str) -> dict:
+async def document(
+    document_id: str,
+    q: str | None = Query(None, max_length=100),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> dict:
+    """A document's sections, one page at a time (large acts have hundreds of sections)."""
     rows = {d.document_id: d for d in ka.list_documents()}
     if document_id not in rows:
         raise HTTPException(404, detail="document not found")
-    records = ka.records_for(document_id)
+    records = [r for r in ka.records_for(document_id) if matches(q, search_key(r.section, r.title, r.citation))]
+    sliced = paginate(records, page, page_size)
     return {
         "document": asdict(rows[document_id]),
+        "total": sliced.total,
+        "page": sliced.page,
+        "page_size": sliced.page_size,
+        "pages": sliced.pages,
         "sections": [
             {
                 "id": r.id,
@@ -43,7 +99,7 @@ async def document(document_id: str) -> dict:
                 "source_file": r.source_file,
                 "text": r.text,
             }
-            for r in records
+            for r in sliced.items
         ],
     }
 

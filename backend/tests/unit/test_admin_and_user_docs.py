@@ -311,3 +311,28 @@ def test_chat_with_expired_document_is_404() -> None:
         assert resp.status_code == 404 and resp.json()["detail"]["code"] == "user_doc_expired"
     finally:
         app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------- paginated listings
+def test_admin_documents_are_paginated_with_totals(sandbox, monkeypatch) -> None:
+    from pydantic import SecretStr
+
+    retriever, _ = sandbox
+    chunks = [_chunk(f"doc{i}-s1", f"doc{i:02d}", "আলফা") for i in range(25)]
+    retriever.replace_index(BM25Index.build(chunks))
+    monkeypatch.setattr(settings, "admin_token", SecretStr("t"))
+    client = TestClient(app)
+    auth = {"Authorization": "Bearer t"}
+
+    first = client.get("/api/v1/admin/documents", params={"page_size": 10}, headers=auth).json()
+    assert (first["total"], first["pages"], len(first["items"])) == (25, 3, 10)
+    assert first["totals"]["docs"] == 25 and first["totals"]["chunks"] == 25
+    last = client.get("/api/v1/admin/documents", params={"page": 9, "page_size": 10}, headers=auth).json()
+    assert last["page"] == 3 and len(last["items"]) == 5  # page clamped to the last one
+    found = client.get("/api/v1/admin/documents", params={"q": "doc07"}, headers=auth).json()
+    assert [d["document_id"] for d in found["items"]] == ["doc07"]
+    assert client.get("/api/v1/admin/documents", params={"kind": "uploaded"}, headers=auth).json()["total"] == 25
+
+    # the cached list follows index swaps (uploads/deletes)
+    retriever.replace_index(BM25Index.build(chunks[:3]))
+    assert client.get("/api/v1/admin/documents", headers=auth).json()["total"] == 3

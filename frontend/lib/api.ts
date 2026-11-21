@@ -1,13 +1,13 @@
 import type {
-  AdminDocument,
+  AdminDocumentDetail,
+  AdminDocumentPage,
   AdminJob,
-  AdminSection,
   ApiErrorDetail,
   ChatRequest,
   ChatResponse,
   ChunkDetail,
   DocumentDetail,
-  DocumentSummary,
+  DocumentPage,
   HealthReport,
   UserDocInfo,
 } from "./types";
@@ -60,8 +60,23 @@ export const getHealth = () => request<HealthReport>("/health");
 export const askQuestion = (body: ChatRequest) =>
   request<ChatResponse>("/chat", { method: "POST", body: JSON.stringify(body) });
 
-export const listSources = (area?: string) =>
-  request<DocumentSummary[]>(`/sources${area ? `?area=${encodeURIComponent(area)}` : ""}`);
+/** "?a=1&b=x" from the defined, non-empty values. */
+function query(params: Record<string, string | number | undefined | null>): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+  const text = qs.toString();
+  return text ? `?${text}` : "";
+}
+
+export interface ListParams {
+  q?: string;
+  area?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export const listSources = ({ q, area, page = 1, pageSize = 20 }: ListParams = {}, init?: RequestInit) =>
+  request<DocumentPage>(`/sources${query({ q, area, page, page_size: pageSize })}`, init);
 
 export const getDocument = (documentId: string) =>
   request<DocumentDetail>(`/sources/documents/${encodeURIComponent(documentId)}`);
@@ -108,10 +123,20 @@ export const adminCheck = (token: string) =>
     headers: auth(token),
   });
 
-export const adminDocuments = (token: string) => request<AdminDocument[]>("/admin/documents", { headers: auth(token) });
+export type AdminDocKind = "all" | "builtin" | "uploaded";
 
-export const adminDocument = (token: string, id: string) =>
-  request<{ document: AdminDocument; sections: AdminSection[] }>(`/admin/documents/${encodeURIComponent(id)}`, {
+export const adminDocuments = (
+  token: string,
+  { q, area, page = 1, pageSize = 20, kind = "all" }: ListParams & { kind?: AdminDocKind } = {},
+  init?: RequestInit,
+) =>
+  request<AdminDocumentPage>(`/admin/documents${query({ q, area, kind, page, page_size: pageSize })}`, {
+    ...init,
+    headers: auth(token),
+  });
+
+export const adminDocument = (token: string, id: string, { q, page = 1, pageSize = 20 }: ListParams = {}) =>
+  request<AdminDocumentDetail>(`/admin/documents/${encodeURIComponent(id)}${query({ q, page, page_size: pageSize })}`, {
     headers: auth(token),
   });
 

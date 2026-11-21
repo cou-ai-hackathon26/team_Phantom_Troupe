@@ -30,6 +30,7 @@ from app.repositories.bm25_repository import BM25Index
 from app.repositories.qdrant_repository import QdrantRepository
 from app.schemas.ingestion import ChunkRecord, SectionRecord
 from app.services.answer_cache import get_answer_cache
+from app.services.pagination import IndexCache
 from app.services.retrieval_service import get_retriever
 
 logger = logging.getLogger(__name__)
@@ -249,7 +250,16 @@ class DocumentRow:
     source_files: list[str]
 
 
+_rows_cache: IndexCache[list[DocumentRow]] = IndexCache()
+
+
 def list_documents() -> list[DocumentRow]:
+    """Every indexed document, sorted by area and title. Cached per loaded index: uploads and deletes swap
+    in a new BM25 index (Retriever.replace_index), which rebuilds this list on the next call."""
+    return _rows_cache.get(get_retriever().bm25, _build_rows)  # shared: callers must not mutate it
+
+
+def _build_rows() -> list[DocumentRow]:
     specs = document_specs()
     builtin = builtin_ids()
     rows: dict[str, DocumentRow] = {}

@@ -11,6 +11,17 @@ class DocumentSummary(BaseModel):
     chunk_count: int
 
 
+class DocumentPage(BaseModel):
+    """One page of the document list, with per-area counts for the current search."""
+
+    items: list[DocumentSummary]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+    counts: dict[str, int]  # area -> documents matching the search ("all" = every area)
+
+
 class SectionSummary(BaseModel):
     section: str
     title: str
