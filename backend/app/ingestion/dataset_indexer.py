@@ -8,9 +8,11 @@ Indexing a step replaces exactly that step's documents in Qdrant and Postgres (b
 embeds only its chunks, so earlier steps are never re-embedded. Re-running a step is idempotent.
 """
 
+import contextlib
+import fcntl
 import json
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -29,7 +31,10 @@ from app.schemas.ingestion import ChunkRecord, SectionRecord
 PROCESSED = DATA_DIR / "processed"
 CHUNKS_DIR = PROCESSED / "chunks"
 DATASET_REGISTRY = DATA_DIR / "dataset_registry.json"
-QDRANT_BATCH = 128
+LOCK_PATH = DATA_DIR / "processed" / ".ingest.lock"
+QDRANT_BATCH = 64
+QDRANT_RETRIES = 5
+DONE_DIR = DATA_DIR / "processed" / ".done"
 PG_BATCH = 500
 
 
@@ -119,22 +124,43 @@ async def replace_in_qdrant(
                 ),
                 wait=True,
             )
-    for start in range(0, len(chunks), QDRANT_BATCH):
+    from tqdm import tqdm
+
+    starts = range(0, len(chunks), QDRANT_BATCH)
+    for start in tqdm(starts, desc="qdrant upload", unit="batch", disable=len(starts) < 20):
         batch = chunks[start : start + QDRANT_BATCH]
-        await repo.upsert(
-            [c.id for c in batch],
-            vectors[start : start + QDRANT_BATCH].tolist(),
-            [
-                {
-                    "area": c.area,
-                    "act": c.act,
-                    "section": c.section,
-                    "citation": c.citation,
-                    "document_id": c.document_id,
-                }
-                for c in batch
-            ],
+        await _with_retry(
+            lambda batch=batch, start=start: repo.upsert(
+                [c.id for c in batch],
+                vectors[start : start + QDRANT_BATCH].tolist(),
+                [
+                    {
+                        "area": c.area,
+                        "act": c.act,
+                        "section": c.section,
+                        "citation": c.citation,
+                        "document_id": c.document_id,
+                    }
+                    for c in batch
+                ],
+            )
         )
+
+
+async def _with_retry(call, attempts: int = QDRANT_RETRIES) -> None:  # noqa: ANN001 - zero-arg coroutine factory
+    """Qdrant Cloud free tier times out under load: retry with exponential backoff (2, 4, 8, 16 s)."""
+    import asyncio
+
+    for attempt in range(1, attempts + 1):
+        try:
+            await call()
+            return
+        except Exception as exc:  # noqa: BLE001 - httpx timeouts arrive wrapped in several exception types
+            if attempt == attempts:
+                raise
+            wait = 2**attempt
+            print(f"WARN  qdrant write failed ({type(exc).__name__}); retry {attempt}/{attempts - 1} in {wait}s")
+            await asyncio.sleep(wait)
 
 
 async def replace_in_postgres(
@@ -184,6 +210,29 @@ def rebuild_bm25(path: Path | None = None) -> int:
 # ---------------------------------------------------------------------------- one step
 
 
+@contextlib.contextmanager
+def store_lock(path: Path | None = None) -> Iterator[None]:
+    """One writer at a time: steps may convert/embed in parallel, but registry, chunk cache, Qdrant,
+    Postgres and BM25 are updated by one process at a time (an exclusive flock)."""
+    path = path or LOCK_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def is_done(step: str) -> bool:
+    return (DONE_DIR / step).exists()
+
+
+def replaced_ids(step: str, specs: list[DocumentSpec]) -> list[str]:
+    previous = [s.document_id for s in load_dataset_registry().get(step, [])]
+    return sorted(set(previous) | {s.document_id for s in specs})
+
+
 def save_step(step: str, specs: list[DocumentSpec], records: list[SectionRecord]) -> list[str]:
     """Write the step's section JSONL and registry entry; returns the document ids it replaces."""
     registry = load_dataset_registry()
@@ -203,9 +252,21 @@ async def index_step(
     vectors: np.ndarray,
     skip_postgres: bool = False,
 ) -> StepReport:
+    with store_lock():
+        return await _index_step_locked(step, specs, records, chunks, vectors, skip_postgres)
+
+
+async def _index_step_locked(
+    step: str,
+    specs: list[DocumentSpec],
+    records: list[SectionRecord],
+    chunks: list[ChunkRecord],
+    vectors: np.ndarray,
+    skip_postgres: bool,
+) -> StepReport:
     t0 = time.perf_counter()
-    replaced = save_step(step, specs, records)
-    write_chunk_cache(step, chunks)
+    (DONE_DIR / step).unlink(missing_ok=True)
+    replaced = replaced_ids(step, specs)
 
     repo = QdrantRepository()
     await repo.ensure_collection(settings.embedding_dim)
@@ -219,8 +280,11 @@ async def index_step(
             source_files.setdefault(r.document_id, r.source_file)
         n_pg = await replace_in_postgres(replaced, specs, chunks, source_files)
 
+    # only after Qdrant and Postgres succeeded: a failed step stays pending and its old cache stays valid
+    save_step(step, specs, records)
+    write_chunk_cache(step, chunks)
     n_bm25 = rebuild_bm25()
-    return StepReport(
+    report = StepReport(
         step=step,
         documents=len(specs),
         sections=len(records),
@@ -231,6 +295,10 @@ async def index_step(
         postgres=n_pg,
         seconds=time.perf_counter() - t0,
     )
+    if report.consistent:
+        DONE_DIR.mkdir(parents=True, exist_ok=True)
+        (DONE_DIR / step).write_text(f"{report.chunks} chunks\n", encoding="utf-8")
+    return report
 
 
 async def wipe_all(skip_postgres: bool = False) -> None:
@@ -248,7 +316,7 @@ async def wipe_all(skip_postgres: bool = False) -> None:
             await session.execute(text("delete from documents"))
             await session.execute(text("delete from answer_cache"))
             await session.commit()
-    for path in [*PROCESSED.glob("*.jsonl"), *CHUNKS_DIR.glob("*.jsonl")]:
+    for path in [*PROCESSED.glob("*.jsonl"), *CHUNKS_DIR.glob("*.jsonl"), *DONE_DIR.glob("*")]:
         path.unlink()
     for path in (
         DATASET_REGISTRY,

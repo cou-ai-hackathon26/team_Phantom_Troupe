@@ -28,7 +28,7 @@ import pymupdf  # noqa: E402
 from app.core.config import DATA_DIR, settings  # noqa: E402
 from app.ingestion import bdlaws_parser, generic_parser, markdown_parser, sqlite_laws  # noqa: E402
 from app.ingestion.area_map import DocumentSpec  # noqa: E402
-from app.ingestion.dataset_indexer import index_step, load_dataset_registry, wipe_all  # noqa: E402
+from app.ingestion.dataset_indexer import index_step, is_done, load_dataset_registry, wipe_all  # noqa: E402
 from app.ingestion.dataset_sources import (  # noqa: E402
     COMPILED_ISSUER,
     DATASET_DIR,
@@ -64,6 +64,13 @@ def _is_bdlaws(path: Path) -> bool:
         return doc.page_count > 0 and "bdlaws.minlaw.gov.bd" in doc[0].get_text()
 
 
+def _json_default(value: object) -> object:
+    """OCR engines report numpy scalars (confidence, needs_review); store them as plain JSON values."""
+    if hasattr(value, "item"):
+        return value.item()  # type: ignore[union-attr]
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def _parse_generic_cached(src: SourceFile, ocr: generic_parser.PageOcrRunner) -> generic_parser.ParsedPdf:
     cache = OCR_CACHE / f"{src.sha256}.json"
     if cache.exists():
@@ -76,7 +83,7 @@ def _parse_generic_cached(src: SourceFile, ocr: generic_parser.PageOcrRunner) ->
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(
         json.dumps({"file": str(src.rel), "pages": parsed.pages, "reports": [asdict(r) for r in parsed.reports]},
-                   ensure_ascii=False),
+                   ensure_ascii=False, default=_json_default),
         encoding="utf-8",
     )  # fmt: skip
     return parsed
@@ -103,10 +110,13 @@ def convert_bdlaws(step: Step, files: list[SourceFile]) -> tuple[list[DocumentSp
     return [spec], records
 
 
+SECOND_OCR = True  # --no-second-ocr: Tesseract only (CPU), much faster for bulk runs
+
+
 def convert_pdfs(step: Step, files: list[SourceFile]) -> tuple[list[DocumentSpec], list[SectionRecord]]:
     specs: list[DocumentSpec] = []
     records: list[SectionRecord] = []
-    ocr = generic_parser.PageOcrRunner()
+    ocr = generic_parser.PageOcrRunner() if SECOND_OCR else generic_parser.PageOcrRunner(secondary="")
     try:
         for i, src in enumerate(files, start=1):
             t0 = time.perf_counter()
@@ -192,7 +202,7 @@ def cmd_list() -> int:
     for step in STEPS:
         files = step_files(step)
         dups = sum(1 for f in files if f.duplicate_of)
-        done = f"done ({len(registry[step.name])} docs)" if step.name in registry else "pending"
+        done = f"done ({len(registry.get(step.name, []))} docs)" if is_done(step.name) else "pending"
         print(f"{step.name:<16} {step.kind:<8} {step.area:<9} {len(files) - dups:>4} files"
               f"{f' (+{dups} duplicates skipped)' if dups else '':<28} {done:<18} {step.description}")  # fmt: skip
         total += len(files) - dups
@@ -261,7 +271,36 @@ async def cmd_step(name: str, convert_only: bool, skip_postgres: bool) -> int:
     return 0 if report.consistent else 1
 
 
+async def cmd_resume(skip_postgres: bool, pause: int) -> int:
+    """Run every pending step in manifest order, one at a time, with a progress line and ETA."""
+    pending = [s.name for s in STEPS if not is_done(s.name)]
+    if not pending:
+        print("OK    every step is done")
+        return 0
+    print(f"OK    {len(pending)} pending steps: {', '.join(pending)}")
+    t0 = time.perf_counter()
+    failed: list[str] = []
+    for i, name in enumerate(pending, start=1):
+        elapsed = time.perf_counter() - t0
+        eta = f", ETA ~{elapsed / (i - 1) * (len(pending) - i + 1) / 60:.0f} min" if i > 1 else ""
+        bar = "#" * (i - 1) + "." * (len(pending) - i + 1)
+        print(f"\n[{bar}] step {i}/{len(pending)}: {name}  (elapsed {elapsed / 60:.0f} min{eta})", flush=True)
+        try:
+            if await cmd_step(name, convert_only=False, skip_postgres=skip_postgres) != 0:
+                failed.append(name)
+        except Exception as exc:  # noqa: BLE001 - keep going; the step stays pending and can be re-run
+            print(f"FAIL  {name}: {type(exc).__name__}: {exc}")
+            failed.append(name)
+        if pause and i < len(pending):
+            print(f"      pausing {pause}s to let the laptop cool", flush=True)
+            await asyncio.sleep(pause)
+    print(f"\n{'OK  ' if not failed else 'FAIL'}  finished in {(time.perf_counter() - t0) / 60:.0f} min; "
+          f"failed: {failed or 'none'} (re-run --resume to retry them)")  # fmt: skip
+    return 0 if not failed else 1
+
+
 def main() -> int:
+    global SECOND_OCR
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--status", action="store_true")
@@ -270,7 +309,12 @@ def main() -> int:
     ap.add_argument("--step")
     ap.add_argument("--convert-only", action="store_true")
     ap.add_argument("--skip-postgres", action="store_true")
+    ap.add_argument("--no-second-ocr", action="store_true", help="Tesseract only; skip the GPU second engine")
+    ap.add_argument("--resume", action="store_true", help="run all pending steps (Tesseract only, cooler)")
+    ap.add_argument("--pause", type=int, default=20, help="seconds to rest between steps with --resume")
     args = ap.parse_args()
+    if args.no_second_ocr:
+        SECOND_OCR = False
     if not DATASET_DIR.exists():
         print(f"FAIL  {DATASET_DIR} not found")
         return 1
@@ -287,6 +331,12 @@ def main() -> int:
         return 0
     if args.step:
         return asyncio.run(cmd_step(args.step, args.convert_only, args.skip_postgres))
+    if args.resume:
+        import os
+
+        SECOND_OCR = False
+        os.environ.setdefault("OMP_THREAD_LIMIT", "2")  # Tesseract threads: slower but much cooler
+        return asyncio.run(cmd_resume(args.skip_postgres, args.pause))
     ap.print_help()
     return 1
 

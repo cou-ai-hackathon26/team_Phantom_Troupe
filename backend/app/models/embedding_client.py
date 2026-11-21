@@ -50,6 +50,10 @@ class EmbeddingClient:
                 device = resolve_device(self.device_preference)
                 logger.info("loading embedding model", extra={"data": {"model": self.model_name, "device": device}})
                 self._model = SentenceTransformer(self.model_name, device=device)
+                if device == "cuda":
+                    # fp16 on the laptop RTX 3050: ~7x faster than fp32 (31 vs 4.5 chunks/s), vectors
+                    # within cosine 0.9995 of fp32, so indexes built either way stay compatible
+                    self._model.half()
             return self._model
 
     def dimension(self) -> int:

@@ -20,11 +20,13 @@ from app.schemas.ingestion import SectionRecord
 SKIP_SLUGS = frozenset({"act-952", "act-1672"})
 BDLAWS_URL = "http://bdlaws.minlaw.gov.bd/{slug}.html"
 
+_BN = r"(?<![ঀ-৿])"  # Bangla keyword must start a word: শ্রম, not পারিশ্রমিক / আশ্রম
+
 _AREA_RULES: list[tuple[Area, re.Pattern[str]]] = [
     (
         "labour",
         re.compile(
-            r"শ্রম|শ্রমিক|মজুর|কারখানা|ট্রেড ইউনিয়ন|labour|labor\b|workmen|worker|wages?\b|factor(?:y|ies)|"
+            rf"{_BN}(?:শ্রম|মজুর|কারখানা|ট্রেড ইউনিয়ন)|labour|labor\b|workmen|workers?\b|wages?\b|factories act|"
             r"trade unions?|industrial relations|maternity benefit|shops and establishments|employment",
             re.IGNORECASE,
         ),
@@ -32,13 +34,14 @@ _AREA_RULES: list[tuple[Area, re.Pattern[str]]] = [
     (
         "land",
         re.compile(
-            r"ভূমি|জমি|প্রজাস্বত্ব|খাস|অধিগ্রহণ|হুকুম ?দখল|অর্পিত|স্থাবর সম্পত্তি|বালুমহাল|জলমহাল|"
-            r"\bland|tenancy|acquisition|requisition|immovable property|evacuee|abandoned property|survey",
+            rf"{_BN}(?:ভূমি|জমি|প্রজাস্বত্ব|খাস|অধিগ্রহণ|হুকুম ?দখল|অর্পিত|স্থাবর সম্পত্তি|বালুমহাল|জলমহাল)|"
+            r"\blands?\b|tenancy|(?:land|state) acquisition|acquisition (?:of|and) (?:waste land|immovable|tenancy)|"
+            r"requisition|immovable property|evacuee|abandoned property|survey act",
             re.IGNORECASE,
         ),
     ),
-    ("gd", re.compile(r"পুলিশ|police", re.IGNORECASE)),
-    ("allowance", re.compile(r"প্রতিবন্ধী|ভাতা|disab", re.IGNORECASE)),
+    ("gd", re.compile(rf"{_BN}পুলিশ|police", re.IGNORECASE)),
+    ("allowance", re.compile(rf"{_BN}প্রতিবন্ধী|disabled persons|disability\b", re.IGNORECASE)),
 ]
 
 _LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")

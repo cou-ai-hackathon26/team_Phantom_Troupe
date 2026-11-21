@@ -43,6 +43,19 @@ _PRINT_HEADER = re.compile(r"^(?:[0-9]{2}/[0-9]{2}/[0-9]{4}|Laws of Bangladesh)$
 # "তথ্য তলবের ক্ষমতা২৩৭৷ এই …" or "খাবার কক্ষ, ইত্যাদি1[ ৯৩। (১) …" -> title + body
 _GLUED_TITLE = re.compile(r"^(?P<title>[^০-৯।৷\[\]]{2,60}?)(?P<body>[0-9]{0,2}\[?\s*[০-৯]{1,3}[ক-ঞ]?[।৷].*)$")
 BODY_X0 = 120.5
+# the page footer ("Copyright © 2019, Legislative and Parliamentary Affairs Division / Ministry of Law,
+# Justice and Parliamentary Affairs") wraps into narrow rows that look like margin titles
+_FOOTER_WORDS = frozenset(
+    {"copyright", "©", "2019", "legislative", "and", "parliamentary", "affairs", "division", "ministry", "of", "law",
+     "justice"}
+)  # fmt: skip
+
+
+def _is_footer(text: str) -> bool:
+    words = [w.strip(",.").lower() for w in text.split()]
+    return bool(words) and all(w in _FOOTER_WORDS for w in words if w)
+
+
 _ACT_NUMBER = re.compile(r"^\(.*সনের.*নং.*\)$")
 _DATE_LINE = re.compile(r"^\[.*\]$")
 
@@ -158,7 +171,7 @@ def _assemble(out: ParsedBdlaws, stream: list[tuple[_Line, bool]]) -> None:
         text = line.text.strip()
         if not text or any(marker in text for marker in END_MARKERS) or text.startswith("Copyright"):
             continue
-        if _PRINT_HEADER.match(text):
+        if _PRINT_HEADER.match(text) or _is_footer(text):
             continue
         cleaned = _clean(text)
 

@@ -26,7 +26,7 @@ def get_qdrant_client() -> AsyncQdrantClient:
     if not settings.qdrant_url:
         raise QdrantNotConfigured("QDRANT_URL is not set in .env")
     api_key = settings.qdrant_api_key.get_secret_value() if settings.qdrant_api_key else None
-    return AsyncQdrantClient(url=settings.qdrant_url, api_key=api_key, timeout=30)
+    return AsyncQdrantClient(url=settings.qdrant_url, api_key=api_key, timeout=120)
 
 
 @dataclass

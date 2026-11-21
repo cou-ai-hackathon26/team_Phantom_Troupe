@@ -315,3 +315,44 @@ def test_bdlaws_glued_margin_title_is_split() -> None:
     m = _GLUED_TITLE.match("নমুনা শিরোনাম, ইত্যাদি1[ ৯৩। (১) নমুনা লেখা")
     assert m and m.group("title") == "নমুনা শিরোনাম, ইত্যাদি" and m.group("body").startswith("1[ ৯৩।")
     assert _GLUED_TITLE.match("নমুনা লেখা যেখানে ২০০৬ সনের আইন আছে।") is None  # digits in the prefix: not a title
+
+
+def test_bdlaws_footer_fragments_are_not_titles() -> None:
+    from app.ingestion.bdlaws_parser import _is_footer
+
+    for frag in ("Legislative and", "Parliamentary Affairs Division", "Ministry of Law, Justice", "Copyright © 2019,"):
+        assert _is_footer(frag)
+    assert not _is_footer("নমুনা শিরোনাম") and not _is_footer("Labour Act")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "মহা হিসাব নিরীক্ষক ও নিয়ন্ত্রক (পারিশ্রমিক ও বিশেষ অধিকার) আইন, ১৯৯৮",
+        "গান্ধী আশ্রম (ট্রাস্টি বোর্ড) আইন, ২০২১",
+        "সুরক্ষিত লেনদেন (অস্থাবর সম্পত্তি) আইন, ২০২৩",
+        "The Hindu Inheritance (Removal of Disabilities) Act, 1928",
+        "বাংলাদেশ সুপ্রীম কোর্টের বিচারক (ভ্রমণ ভাতা) আইন, ২০২১",
+        "The Jute Companies (Acquisition of Shares) Ordinance, 1975",
+    ],
+)
+def test_area_for_title_avoids_substring_false_positives(title: str) -> None:
+    assert sqlite_laws.area_for_title(title) == "general"
+
+
+def test_ocr_cache_accepts_numpy_scalars() -> None:
+    import json
+
+    from scripts.ingest_dataset import _json_default
+
+    assert json.loads(json.dumps({"c": np.float64(88.5), "r": np.bool_(True)}, default=_json_default)) == {
+        "c": 88.5,
+        "r": True,
+    }
+
+
+def test_store_lock_is_reentrant_across_calls(tmp_path: Path) -> None:
+    with dataset_indexer.store_lock(tmp_path / "l"):
+        pass
+    with dataset_indexer.store_lock(tmp_path / "l"):
+        pass

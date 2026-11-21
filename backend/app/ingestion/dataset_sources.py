@@ -198,7 +198,8 @@ def area_for_path(rel: Path, default: Area) -> Area:
     """Area of one file: DSS files about allowances go to `allowance`, everything else keeps the default."""
     top = rel.parts[0] if rel.parts else ""
     if top == DSS:
-        return "allowance" if _ALLOWANCE_HINT.search(str(rel)) else default
+        portal = len(rel.parts) > 1 and rel.parts[1] == "00_DSS_Portal_Overview"
+        return "allowance" if portal or _ALLOWANCE_HINT.search(str(rel)) else default
     return FOLDER_AREA.get(top, default)
 
 
