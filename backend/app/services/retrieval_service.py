@@ -1,6 +1,7 @@
 """Hybrid retrieval: dense (Qdrant, e5 "query: ") + BM25, fused with RRF.
 
-Exact section references ("ধারা ১২৩", "section 123", "১২৩ ধারা") are resolved directly against chunk
+Exact section references ("ধারা ১২৩", "section 123", "১২৩ ধারা", and the Constitution's
+"অনুচ্ছেদ ২৭" / "article 27") are resolved directly against chunk
 metadata and placed at the top of the sparse ranking, so a section-number question always hits.
 With many acts indexed, "ধারা ১২৩" exists in hundreds of them, so the exact list is limited to the act
 the query names, else the acts already among the dense/BM25 hits, else the area's primary act.
@@ -20,8 +21,13 @@ from app.repositories.qdrant_repository import DenseHit, QdrantRepository
 from app.schemas.ingestion import ChunkRecord
 from app.services.fusion_service import FusedCandidate, reciprocal_rank_fusion
 
-_SECTION_BEFORE = re.compile(r"(?:ধারা|section|sec\.?|s\.)\s*-?\s*([0-9০-৯]+[ক-ঞa-j]?)", re.IGNORECASE)
-_SECTION_AFTER = re.compile(r"([0-9০-৯]+[ক-ঞ]?)\s*(?:নং|নম্বর)?\s*ধারা")
+_SECTION_BEFORE = re.compile(
+    r"(?:ধারা|অনুচ্ছেদ|section|sec\.?|s\.|article|art\.)\s*-?\s*([0-9০-৯]+[ক-ঞa-j]?)", re.IGNORECASE
+)
+_SECTION_AFTER = re.compile(r"([0-9০-৯]+[ক-ঞ]?)\s*(?:নং|নম্বর)?\s*(?:ধারা|অনুচ্ছেদ)")
+# "অনুচ্ছেদ"/"article" means the Constitution, whose chunks are cited as "…, অনুচ্ছেদ N"
+_ARTICLE_WORD = re.compile(r"অনুচ্ছেদ|\barticle\b|\bart\.", re.IGNORECASE)
+ARTICLE_LABEL = "অনুচ্ছেদ"
 _LATIN_SUFFIX = dict(zip("abcdefghij", "কখগঘঙচছজঝঞ", strict=True))
 
 
@@ -141,6 +147,9 @@ class Retriever:
             for cid in index.get(ref, [])
             if area is None or self.chunks[cid].area == area
         ]
+        if _ARTICLE_WORD.search(query):
+            articles = [cid for cid in ids if f", {ARTICLE_LABEL} " in self.chunks[cid].citation]
+            ids = articles or ids
         docs = list(dict.fromkeys(self.chunks[cid].document_id for cid in ids))
         if len(docs) > 1:
             keep = self._named_documents(query, docs)

@@ -100,7 +100,8 @@ def convert_bdlaws(step: Step, files: list[SourceFile]) -> tuple[list[DocumentSp
     spec = DocumentSpec(step.document_id, step.area, step.title, step.issuer, "bdlaws", "bn", step.source_url)
     by_id: dict[str, SectionRecord] = {}
     for src in files:
-        recs = bdlaws_parser.to_section_records(bdlaws_parser.parse_bdlaws_pdf(src.path), spec, src.path.name)
+        parsed = bdlaws_parser.parse_bdlaws_pdf(src.path, whole_act=step.whole_act)
+        recs = bdlaws_parser.to_section_records(parsed, spec, src.path.name, step.section_label)
         if not recs:
             print(f"WARN  no sections in {src.rel.name}")
         for r in recs:

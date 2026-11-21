@@ -39,6 +39,22 @@ def test_section_refs_bangla_ascii_and_suffix() -> None:
     assert section_refs("বেতন কবে দিবে") == []
 
 
+def test_section_refs_constitution_articles() -> None:
+    assert section_refs("অনুচ্ছেদ ২৭ কী বলে") == ["27"]
+    assert section_refs("সংবিধানের ৭০ অনুচ্ছেদ") == ["70"]
+    assert section_refs("Article 102 of the constitution") == ["102"]
+
+
+def test_article_reference_prefers_article_chunks() -> None:
+    article = _chunk("c27", "২৭", "আলফা").model_copy(
+        update={"document_id": "const", "act": "পরীক্ষা সংবিধান", "citation": "পরীক্ষা সংবিধান, অনুচ্ছেদ ২৭"}
+    )
+    section = _chunk("s27", "২৭", "আলফা").model_copy(update={"document_id": "other"})
+    r = Retriever(BM25Index.build([section, article]), FakeQdrant([]), FakeEmbedder())  # type: ignore[arg-type]
+    assert r.exact_section_ids("অনুচ্ছেদ ২৭", area=None) == ["c27"]
+    assert r.exact_section_ids("ধারা ২৭", area=None, hint_ids=["s27"]) == ["s27"]
+
+
 def _chunk(cid: str, section: str, text: str, area: str = "labour", part: int | None = None) -> ChunkRecord:
     return ChunkRecord(
         id=cid,

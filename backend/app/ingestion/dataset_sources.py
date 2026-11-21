@@ -29,6 +29,7 @@ ONLINE_GD = "Online GD (Bangladesh Police)"
 NHRC = "National Human Rights Commission (NHRC)"
 CHRONO = "Laws of Bangladesh (Chronological Index)"
 CHRONO_SQLITE = f"{CHRONO}/01_Full_Database_and_Corpus/laws_of_bangladesh.sqlite"
+CONSTITUTION_PDF = "bdlaws.minlaw.gov.bd_act-print-957.html.pdf"  # dataset root, whole-act print
 
 BDLAWS_ISSUER = "লেজিসলেটিভ ও সংসদ বিষয়ক বিভাগ, আইন, বিচার ও সংসদ বিষয়ক মন্ত্রণালয়"
 LAND_ISSUER = "ভূমি মন্ত্রণালয়"
@@ -58,6 +59,9 @@ class Step:
     # bdlaws steps: one document for the whole folder
     document_id: str | None = None
     title: str | None = None
+    pattern: str | None = None  # glob inside `folder` (default: every PDF of the step)
+    whole_act: bool = False  # bdlaws act-print PDF with every section in one file
+    section_label: str = "ধারা"  # "অনুচ্ছেদ" for the Constitution
     # sqlite steps: inclusive act-year range
     years: tuple[int, int] | None = None
 
@@ -88,6 +92,20 @@ STEPS: list[Step] = [
         document_id="labour-amendment-2026",
         title="বাংলাদেশ শ্রম (সংশোধন) আইন, ২০২৬",
         description="Bangladesh Labour (Amendment) Act 2026, one bdlaws PDF per section",
+    ),
+    Step(
+        name="constitution",
+        kind="bdlaws",
+        folder="",
+        pattern=CONSTITUTION_PDF,
+        area="general",
+        issuer=BDLAWS_ISSUER,
+        source_url="http://bdlaws.minlaw.gov.bd/act-957.html",
+        document_id="constitution-bn",
+        title="গণপ্রজাতন্ত্রী বাংলাদেশের সংবিধান",
+        whole_act=True,
+        section_label="অনুচ্ছেদ",
+        description="Constitution of Bangladesh (Bangla), one bdlaws act-print PDF, one record per article",
     ),
     _pdf("online-gd", ONLINE_GD, "gd", POLICE_ISSUER, "https://gd.police.gov.bd/", "Online GD manual and guide"),
     _pdf(
@@ -213,6 +231,8 @@ def sha256_of(path: Path) -> str:
 
 def _step_pdfs(step: Step, root: Path) -> list[Path]:
     folder = root / step.folder
+    if step.pattern:
+        return sorted(folder.glob(step.pattern))
     pattern = "*.pdf" if step.kind == "bdlaws" or step.name in ("online-gd", "nhrc") else "**/*.pdf"
     pdfs = sorted(folder.glob(pattern))
     if step.name == "police":  # top level and Announcements_and_Orders

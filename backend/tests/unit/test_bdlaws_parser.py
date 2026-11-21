@@ -41,3 +41,24 @@ def test_old_page_with_legacy_danda_and_margin_title() -> None:
     assert rec.title.startswith("কতিপয় ক্ষেত্রে লে-অফকৃত শ্রমিকগণ")
     assert rec.text.startswith("১৮। (১)")
     assert "\n(খ)" in rec.text  # clauses start on their own line for the chunker
+
+
+CONSTITUTION = DATA_DIR / "DataSet" / "bdlaws.minlaw.gov.bd_act-print-957.html.pdf"
+
+
+@pytest.mark.skipif(not CONSTITUTION.exists(), reason="constitution PDF not present")
+def test_whole_act_print_gives_one_record_per_article() -> None:
+    from app.ingestion.area_map import DocumentSpec
+
+    spec = DocumentSpec("constitution-bn", "general", "সংবিধান", "issuer", "bdlaws")
+    parsed = parse_bdlaws_pdf(CONSTITUTION, whole_act=True)
+    records = to_section_records(parsed, spec, CONSTITUTION.name, section_label="অনুচ্ছেদ")
+    by_section = {r.section: r for r in records}
+    assert records[0].section == "প্রস্তাবনা"
+    assert {"১", "২ক", "২৭", "১১৮", "১৪১গ", "১৫৩"} <= by_section.keys()
+    numbers = [r.section for r in records[1:]]
+    assert len(numbers) == len(set(numbers))  # no article twice
+    first = by_section["১"]
+    assert first.citation.endswith("অনুচ্ছেদ ১") and first.chapter and first.chapter.startswith("প্রথম ভাগ")
+    assert "পরিচ্ছেদ" in (by_section["৪৮"].chapter or "")
+    assert len(parsed.notes) > 100 and sum(len(r.notes) for r in records) > 50
