@@ -17,7 +17,9 @@ class Gate:
 
 
 def pre_retrieval_gate(query: NormalizedQuery) -> Gate:
-    if not query.in_scope:
+    # A known area with in_scope=false is a contradiction (seen: "ধারা ১৯ এ কী বলা আছে?" -> labour, false);
+    # let retrieval + Call 2 + validation decide instead of refusing outright.
+    if not query.in_scope and query.area is None:
         return Gate("refuse", "out_of_scope")
     if query.needs_clarification and query.clarification_question:
         return Gate("clarify", "needs_clarification")

@@ -1,0 +1,168 @@
+{
+  "created_at": "2026-11-21T07:26:06+00:00",
+  "gold_file": "gold.jsonl",
+  "model": "openai/gpt-oss-20b",
+  "embedding_model": "intfloat/multilingual-e5-base",
+  "retrieval_min_score": 0.8,
+  "corpus_chunks": 55,
+  "areas_indexed": [
+    "labour"
+  ],
+  "summary": {
+    "n_rows": 24,
+    "n_completed": 24,
+    "n_errors": 0,
+    "status_counts": {
+      "answered": 10,
+      "partial": 1,
+      "refused": 13
+    },
+    "per_variant": {
+      "banglish": {
+        "answered": 2,
+        "refused": 1,
+        "n": 3
+      },
+      "dialect": {
+        "answered": 2,
+        "refused": 2,
+        "n": 4
+      },
+      "english": {
+        "answered": 2,
+        "n": 2
+      },
+      "off_topic": {
+        "refused": 4,
+        "n": 4
+      },
+      "standard": {
+        "answered": 4,
+        "partial": 1,
+        "refused": 6,
+        "n": 11
+      }
+    },
+    "area_detection_accuracy": {
+      "value": 1.0,
+      "n": 20
+    },
+    "correct_refusal_rate": {
+      "value": 1.0,
+      "n": 4
+    },
+    "false_answer_rate": {
+      "value": 0.0,
+      "n": 4
+    },
+    "citation_validity_rate": {
+      "value": 1.0,
+      "n": 16
+    },
+    "recall@5": {
+      "value": null,
+      "n": 0
+    },
+    "mrr": {
+      "value": null,
+      "n": 0
+    },
+    "must_include_coverage": {
+      "value": null,
+      "n": 0
+    },
+    "must_not_include_violations": {
+      "value": 0,
+      "n": 0
+    },
+    "latency_ms": {
+      "p50": 17732.0,
+      "p95": 24831.45,
+      "n": 24
+    },
+    "unlabelled_rows": 20
+  },
+  "ablation": {
+    "dense": {
+      "n": 0,
+      "recall@5": null,
+      "mrr": null
+    },
+    "bm25": {
+      "n": 0,
+      "recall@5": null,
+      "mrr": null
+    },
+    "hybrid": {
+      "n": 0,
+      "recall@5": null,
+      "mrr": null
+    }
+  },
+  "threshold_tradeoff": [
+    {
+      "threshold": 0.7,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 0,
+      "n_off_topic": 4
+    },
+    {
+      "threshold": 0.72,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 0,
+      "n_off_topic": 4
+    },
+    {
+      "threshold": 0.74,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 1,
+      "n_off_topic": 4
+    },
+    {
+      "threshold": 0.76,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 3,
+      "n_off_topic": 4
+    },
+    {
+      "threshold": 0.78,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 3,
+      "n_off_topic": 4
+    },
+    {
+      "threshold": 0.8,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 3,
+      "n_off_topic": 4
+    },
+    {
+      "threshold": 0.82,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 3,
+      "n_off_topic": 4
+    },
+    {
+      "threshold": 0.84,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 3,
+      "n_off_topic": 4
+    },
+    {
+      "threshold": 0.86,
+      "answerable_blocked": 0,
+      "n_answerable": 0,
+      "off_topic_blocked": 3,
+      "n_off_topic": 4
+    }
+  ],
+  "duration_s": 426.9
+}

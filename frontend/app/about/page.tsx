@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { FileSearch, MessageCircleQuestion, ShieldCheck, Sparkles } from "lucide-react";
+import { EvalSection } from "@/components/eval-section";
 
 export const metadata: Metadata = { title: "কীভাবে কাজ করে — অধিকারAI" };
 
@@ -66,6 +67,8 @@ export default function AboutPage() {
           </li>
         </ul>
       </section>
+
+      <EvalSection />
 
       <section aria-labelledby="limits-heading" className="space-y-3">
         <h2 id="limits-heading" className="text-xl font-semibold">সীমাবদ্ধতা</h2>

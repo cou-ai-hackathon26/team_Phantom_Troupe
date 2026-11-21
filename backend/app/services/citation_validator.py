@@ -48,7 +48,11 @@ def _resolve(raw_id: str, labelled: dict[str, ChunkRecord]) -> str | None:
 def numbers_in(text: str) -> set[str]:
     """Digit sequences in text, ASCII-normalized, ignoring "১." style list numbering and thousands commas."""
     text = _LIST_NUMBER.sub(" ", text)
-    return {bn_to_ascii_digits(m.group(0)).replace(",", "").rstrip(".") for m in _NUMBER.finditer(text)}
+    out: set[str] = set()
+    for m in _NUMBER.finditer(text):
+        n = bn_to_ascii_digits(m.group(0)).replace(",", "").rstrip(".")
+        out.add(n.lstrip("0") or "0")  # compare by value: the source writes "০৬", answers write "৬"
+    return out
 
 
 def _excerpt(text: str) -> str:

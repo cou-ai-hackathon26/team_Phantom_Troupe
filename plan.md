@@ -3,7 +3,7 @@
 Schedule: 21–23 Nov 2026 to build, 24 Nov morning to polish, then the final demo. MVP comes first. Phases 1–6 are the core and Phases 7–9 make it competitive.
 Rules are in `CLAUDE.md` and the spec is `docs/pipeline.md`.
 
-> **Status note (21 Nov):** the team supplied **PDFs** rather than the prepared JSONL: 21 bdlaws.minlaw.gov.bd section-print PDFs of the Labour Act in `data/Workers — Bangladesh Labour Act 2006/` (preamble plus §§ 1–20 and 3ক). Phase 2 therefore gained a PDF → section-JSONL step (`scripts/convert_pdfs.py`, pulled forward from Phase 7), and ingestion runs on that real data. The land, GD and allowance documents haven't arrived yet. `.env` now has Supabase, Qdrant and Groq (all three connection checks OK). `LLM_MODEL` is still unset.
+> **Status note (21 Nov):** the team supplied **PDFs** rather than the prepared JSONL: 21 bdlaws.minlaw.gov.bd section-print PDFs of the Labour Act in `data/Workers — Bangladesh Labour Act 2006/` (preamble plus §§ 1–20 and 3ক). Phase 2 therefore gained a PDF → section-JSONL step (`scripts/convert_pdfs.py`, pulled forward from Phase 7), and ingestion runs on that real data. The land, GD and allowance documents haven't arrived yet. `.env` now has Supabase, Qdrant and Groq (all three connection checks OK). `LLM_MODEL` is still unset (recommended: `openai/gpt-oss-20b`). Phases 1–7 are complete. Phases 8–9 are built and the remaining items are human tasks: labelling the gold set, setting `LLM_MODEL`, warm-up, rehearsal and the other areas' documents.
 
 ## Architecture
 
@@ -193,20 +193,32 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 
 ## Phase 8 — Evaluation (~3 h)
 
-- [ ] `gold.jsonl` template (questions only; the human fills in expected fields)
-- [ ] `run_eval.py`: Recall@5, MRR, citation validity, refusal rate, false-answer rate, must_include coverage, p50/p95 latency, dense-vs-hybrid ablation, checkpoint and resume, throttling
-- [ ] Threshold trade-off table for `RETRIEVAL_MIN_SCORE`
-- [ ] `GET /api/v1/eval/latest` and the মূল্যায়ন table on `/about`
+- [x] `gold.jsonl` template: 24 questions (11 labour, 3 land, 3 GD, 3 allowance, 4 off-topic; standard, dialect, Banglish and English variants). Questions only; expected fields left empty.
+- [x] `run_eval.py`: Recall@5, MRR, citation validity, refusal rate, false-answer rate, must_include coverage, area-detection accuracy, p50/p95 latency, dense-vs-BM25-vs-hybrid ablation, checkpoint and resume, throttling (`--sleep`, default 15 s), DB logging off, fresh cache
+- [x] Threshold trade-off table for `RETRIEVAL_MIN_SCORE` (printed and saved; not applied automatically)
+- [x] `GET /api/v1/eval/latest` and the মূল্যায়ন table on `/about` (shows only measured numbers and sample counts, "—" where unlabelled)
+- [x] **Fixes found by the evaluation** (each with a regression test):
+  - `ধারা ১৯ এ কী বলা আছে?` was refused as out of scope → normalize prompt now covers "what does section N say", and a known area with `in_scope=false` continues to retrieval
+  - Banglish service-book question was misclassified as land and found no documents → domain terms added to the prompt, plus a fallback to all areas when the classified area has no candidates
+  - "section 4 … probation" got `found=false` despite perfect retrieval → Call 1 maps everyday and English words to statutory Bangla terms (probation → শিক্ষানবিশীকাল), and Call 2 matches by meaning
+  - false `partial`: the source says `০৬`, the answer said `৬` → numbers compared by value
+- [ ] Fill in `expected_chunk_ids`, `must_include` and `must_not_include` in `data/evaluation/gold.jsonl` (human task), then run `run_eval.py` again to get Recall@5, MRR and coverage
+- [ ] Rerun with 15 s spacing (in progress 21 Nov), then update the numbers below
 
-**Done when:** run_eval completes on the filled gold set and `/about` shows the table.
+**Measured (21 Nov, `openai/gpt-oss-20b`, 24 questions, after the fixes, 3 s spacing):** 11/11 labour questions answered (10 answered, 1 partial, later fixed); 9/9 land, GD and allowance questions refused (no documents yet, and no false answers even after falling back to labour documents); off-topic refused 4/4, false-answer rate 0/4; area detection 20/20; citation validity 16/16. Latency p50 17.7 s / p95 24.8 s, inflated by Groq free-tier TPM throttling with back-to-back rows. Single questions spaced 20 s apart took 2.2–2.4 s. Recall@5, MRR and coverage are n/a until the gold set is labelled. Score-gate trade-off: at 0.80 the gate alone blocks 3/4 off-topic questions (Call 1 already refuses all 4).
+
+**Done when:** run_eval completes on the filled gold set and `/about` shows the table. (`/about` shows the table now; the gold set still needs labels.)
 
 ## Phase 9 — Demo polish (24 Nov morning)
 
-- [ ] README: setup, run, ingest, test, eval and credits
-- [ ] `scripts/warmup.py` (wakes the databases, loads e5, pre-caches the demo questions)
-- [ ] `docs/demo_script.md` (3 minutes)
-- [ ] Offline fallback documented
-- [ ] Final QA on real data: tests, ruff, `npm run build`, 360px check, `git grep` for keys
+- [x] README: what it is, architecture, setup in about 10 commands, env table, adding documents, tests and evaluation, API, demo day, offline fallback, credits (data source URLs, models, services, libraries, dev tools, Claude Code)
+- [x] `scripts/warmup.py` (wakes Supabase and Qdrant, loads e5, pre-caches the `- Q…:` questions from `docs/demo_script.md` with the real pipeline, 15 s apart). Written and lint-checked; **not run yet** (needs `LLM_MODEL` in `.env`).
+- [x] `docs/demo_script.md` (3 minutes). The opener is lay-off compensation in dialect, because the wage-payment chapter for the planned "unpaid wages" question isn't ingested.
+- [x] Offline fallback documented (README → Demo day). Not rehearsed with Docker yet.
+- [x] QA so far: 109 backend tests pass, ruff clean, `npm run lint` and `npm run build` pass, 360/1440 px screenshots checked in Phase 5, secret scan of tracked files and API logs clean, `.env` untracked
+- [ ] Set `LLM_MODEL=openai/gpt-oss-20b` in `.env`, run `warmup.py` the day before and the morning of the demo
+- [ ] Rehearse the demo in Chrome with a real microphone; rehearse the offline profile once
+- [ ] Final QA after the remaining documents are ingested
 
 ---
 
@@ -233,4 +245,9 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 
 ## Known limitations
 
-- The dataset hasn't been supplied yet, so no real retrieval or answer numbers exist.
+- Only the Bangladesh Labour Act 2006 (preamble, §§ 1–20) is ingested. Land, GD and allowance questions are refused until their documents are added, and the wage-payment chapter is missing.
+- The gold set is unlabelled, so Recall@5, MRR and answer coverage aren't measured yet.
+- The Groq free tier throttles at a few answers per minute (≈2.5k tokens each). Back-to-back questions take 15–25 s; rely on the cache and warm-up.
+- The Bijoy converter table is core-only and untested on a real legacy-font PDF. Tesseract isn't installed on the dev laptop; the Surya and PaddleOCR adapters aren't wired.
+- A few glyphs are missing from the bdlaws PDF text layer (e.g. `ং` after some conjuncts: `প্রিন্টি প্রেস`), and some source pages carry their own legacy typos (`পরবতী`). These are kept as in the source.
+- Voice input was checked with a scripted recognizer and Chromium's fake microphone, not yet with a real microphone.

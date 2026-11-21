@@ -147,6 +147,12 @@ def test_numbers_ignore_list_numbering_and_markers() -> None:
     assert numbers_in("১. প্রথম ধাপ\n২. দ্বিতীয় ধাপে ৬০ দিন") == {"60"}
 
 
+def test_numbers_compare_by_value() -> None:
+    # real case: §19 says "০৬ (ছয়) মাসের", the answer said "৬ (ছয়) মাসের"
+    assert numbers_in("উহার ০৬ (ছয়) মাসের") == numbers_in("৬ (ছয়) মাসের") == {"6"}
+    assert numbers_in("১,০০০ টাকা") == {"1000"}
+
+
 def test_clarification_path() -> None:
     llm = FakeLLM(
         NormalizeOutput(
@@ -218,3 +224,22 @@ def test_model_written_and_repeated_markers_are_cleaned() -> None:
     v = validate_answer(out, labelled)
     assert v.answer == "এক [১] দুই [২] তিন [১][২]"
     assert v.status == "answered"  # "৫" inside a stray marker is not treated as a claimed number
+
+
+def test_known_area_with_in_scope_false_is_not_refused_outright() -> None:
+    llm = FakeLLM(
+        NormalizeOutput(standard_bangla="আলফা নিয়ম কী?", area="labour", in_scope=False),
+        AnswerOutput(answer="৬০ দিন [C1]", used_chunk_ids=["C1"], found=True),
+    )
+    resp = ask(make(llm))
+    assert resp.status == "answered" and llm.calls == ["normalize", "answer"]
+
+
+def test_wrong_area_with_no_documents_falls_back_to_all_areas() -> None:
+    llm = FakeLLM(
+        NormalizeOutput(standard_bangla="আলফা নিয়ম কী?", area="land", in_scope=True),  # misclassified
+        AnswerOutput(answer="৬০ দিন [C1]", used_chunk_ids=["C1"], found=True),
+    )
+    resp = ask(make(llm), debug=True)
+    assert resp.status == "answered"
+    assert resp.trace is not None and resp.trace.candidates

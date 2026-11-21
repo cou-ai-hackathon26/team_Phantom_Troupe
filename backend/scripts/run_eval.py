@@ -1,7 +1,7 @@
 """End-to-end evaluation on data/evaluation/gold.jsonl. Reports only measured numbers.
 
 Usage (from backend/):
-    LLM_MODEL=openai/gpt-oss-20b python scripts/run_eval.py [--sleep 3] [--fresh] [--limit N]
+    LLM_MODEL=openai/gpt-oss-20b python scripts/run_eval.py [--sleep 15] [--fresh] [--limit N]
 
 - Runs the real /chat pipeline (Call 1 → retrieval → gates → Call 2 → validation) for every row, with a
   fresh in-memory cache (no cached answers) and DB logging off. Throttled for the Groq free tier;
@@ -210,7 +210,12 @@ def fmt(v: dict) -> str:
 async def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--file", type=Path, default=EVAL_DIR / "gold.jsonl")
-    ap.add_argument("--sleep", type=float, default=3.0, help="seconds between pipeline rows (free-tier limits)")
+    ap.add_argument(
+        "--sleep",
+        type=float,
+        default=15.0,
+        help="seconds between rows; Groq free-tier TPM limits inflate latency when rows run back to back",
+    )
     ap.add_argument("--fresh", action="store_true", help="ignore the checkpoint")
     ap.add_argument("--limit", type=int, default=None)
     args = ap.parse_args()

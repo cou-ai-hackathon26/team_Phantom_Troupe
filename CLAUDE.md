@@ -56,15 +56,22 @@ Work one phase of `plan.md` at a time. Before coding a phase, restate its goal a
 All backend commands run from `backend/` with the venv active (`source .venv/bin/activate`), or are prefixed with `.venv/bin/`.
 
 ```bash
-uv pip install -r requirements.txt          # install backend deps
+uv pip install -r requirements.txt          # install backend deps (pins in requirements.txt, sources in requirements.in)
 uvicorn app.main:app --reload --port 8000   # run API (docs at /docs)
-pytest                                      # all tests (LLM/network mocked)
+pytest                                      # all tests (LLM/network/DB mocked; tests/conftest.py disables the DB)
 pytest tests/unit/test_chunker.py::test_short_section_unchanged   # one test
-ruff check . && ruff format .               # lint + format
+ruff check . && ruff format .               # lint + format (line length 120)
 python scripts/check_connections.py         # OK/FAIL for Postgres, Qdrant, Groq
-python scripts/ingest_jsonl.py              # idempotent ingest of data/processed/all_documents.jsonl
-python scripts/try_retrieval.py "প্রশ্ন" --area labour
-python scripts/eval_retrieval.py            # dense vs BM25 vs hybrid, Recall@5 / MRR
+python scripts/convert_pdfs.py              # registered PDF folders -> data/processed/*.jsonl + all_documents.jsonl
+python scripts/create_tables.py             # Supabase tables (idempotent)
+python scripts/ingest_jsonl.py              # all_documents.jsonl -> chunks -> Postgres + Qdrant + BM25 (idempotent)
+python scripts/ingest_pdf.py f.pdf --area gd --title "…"   # new PDF end to end (bdlaws or generic/legacy/OCR)
+python scripts/try_retrieval.py "প্রশ্ন" --area labour       # inspect hybrid retrieval
+python scripts/eval_retrieval.py            # dense vs BM25 vs hybrid on retrieval_seed.jsonl
+python scripts/test_llm_models.py openai/gpt-oss-20b --with-answer   # compare Groq models
+python scripts/run_eval.py                  # full pipeline on gold.jsonl -> data/evaluation/results.json
+python scripts/warmup.py                    # wake DBs, load e5, pre-cache docs/demo_script.md questions
+python scripts/compare_ocr.py scan.pdf --pages 1-3
 ```
 
 ```bash
@@ -75,13 +82,18 @@ npm run build && npm run lint
 ## Architecture
 
 ```
-question ─► Call 1 normalize/classify (query_normalizer) ─► trust gate (in_scope? clarify?)
-        ─► dense (Qdrant, e5 query:) + BM25 ─► RRF top 5 ─► score gate (RETRIEVAL_MIN_SCORE)
-        ─► Call 2 grounded answer (generation_service) ─► citation_validator (ids ∈ retrieved, numbers ∈ chunks)
-        ─► status answered | partial | refused | clarify
+question ─► cache(raw) ─► Call 1 normalize/classify (query_normalizer) ─► pre gate (off-topic & area unknown → refuse; clarify)
+        ─► cache(normalized) ─► dense (Qdrant, e5 "query:") + BM25 + exact "ধারা N" list ─► RRF top 5
+           (no candidates in the classified area → retry all areas) ─► score gate (RETRIEVAL_MIN_SCORE)
+        ─► Call 2 grounded answer citing [C1]…[C5] (generation_service)
+        ─► citation_validator (labels ∈ retrieved; every number, compared by value, ∈ cited chunks; markers → [১])
+        ─► status answered | partial | refused | clarify  ─► query_logs + answer cache
 ```
 
-- **Layers:** `api/routes` call `services/orchestrator.py`. `repositories/` wrap Postgres, Qdrant and BM25. `models/` holds the Groq and embedding clients. `ingestion/` is offline only.
-- **Indexes:** Postgres `chunks` is the canonical store. Qdrant point IDs are deterministic UUIDv5 values from chunk IDs, so re-ingesting never duplicates. The BM25 index is pickled at `data/index/bm25.pkl` alongside the chunk-ID order and loaded once at startup. Chunk counts must match across all three stores.
+- **Layers:** `api/routes` call `services/orchestrator.py`. `repositories/` wrap Qdrant and BM25 (Postgres via `db/`). `models/` holds the Groq and embedding clients. `ingestion/` is offline only; `ingestion/pipeline.py` is the shared ingest core.
+- **Indexes:** Postgres `chunks` is the canonical store. Qdrant point IDs are deterministic UUIDv5 values from chunk IDs, so re-ingesting never duplicates. The BM25 pickle (`data/index/bm25.pkl`) carries chunk metadata too, so retrieval, `/sources` and citations work from it at runtime. Chunk counts must match across all three stores.
+- **bdlaws PDFs:** PyMuPDF splits Bangla words at conjunct glyphs into separate "lines" on one visual row. `pdf_parser.extract_rows` rebuilds rows (glyphs from `words`, spaces from `rawdict`). `bdlaws_parser` separates margin titles (x0<120, narrow), footnotes (ASCII-numbered → `notes`) and body. `text_repair` fixes doubled vowel signs and Bijoy leftovers. Never use `\d` for these patterns, because it matches Bangla digits.
+- **Sources:** register new sources in `ingestion/area_map.py` (PDF folders) or via `ingest_pdf.py` (`data/sources_registry.json`, `data/sources_log.csv`, originals in `data/originals/<area>/`).
 - **Citations:** built from stored chunk metadata, never from LLM text.
-- **Data status:** the prepared JSONL dataset hasn't been added yet. `data/processed/` is empty, and the team may supply PDFs instead (handled in Phase 7).
+- **LLM:** `openai/gpt-oss-20b` won the comparison (correct dialect and Banglish normalization, faithful numbers). The free tier throttles at a few answers per minute (≈2.5k tokens per answer), so space out evaluation runs (`--sleep 15`) and rely on the cache and `warmup.py` for demos.
+- **Data status:** only the Labour Act 2006 (preamble and §§1–20) is ingested, from 21 bdlaws PDFs in `data/Workers — Bangladesh Labour Act 2006/`. Land, GD and allowance questions are refused until their documents are added.

@@ -60,6 +60,9 @@ class Orchestrator:
 
         # ---- retrieval + score gate
         run.retrieval = await self.retriever.retrieve(run.normalized, area=run.area)
+        if not run.retrieval.candidates and run.area and not request.area:
+            # classified area has no documents (or a wrong guess): search every area instead
+            run.retrieval = await self.retriever.retrieve(run.normalized, area=None)
         gate = retrieval_gate(run.retrieval)
         if gate.decision == "refuse":
             return await self._finish(
