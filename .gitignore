@@ -1,0 +1,38 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# model / hf caches
+.cache/
+models_cache/
+hf_cache/
+
+# data caches and indexes (originals and processed JSONL are tracked deliberately)
+data/index/
+data/parsed/
+data/evaluation/checkpoint*.jsonl
+tmp_audio/
+
+# node / next
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+*.tsbuildinfo
+
+# misc
+.DS_Store
+*.log
+
+
+.agents

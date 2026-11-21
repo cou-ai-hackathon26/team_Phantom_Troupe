@@ -1,0 +1,134 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* AdhikarAI design tokens — light theme first. One accent (deep green); status colours only for status. */
+:root {
+  --radius: 0.75rem;
+
+  --background: #faf9f7; /* warm off-white page */
+  --foreground: #1f1d1a; /* warm near-black text, 15.9:1 on background */
+  --card: #ffffff;
+  --card-foreground: #1f1d1a;
+  --popover: #ffffff;
+  --popover-foreground: #1f1d1a;
+
+  --primary: #0b6e4f; /* deep green, 6.0:1 with white */
+  --primary-foreground: #ffffff;
+  --primary-soft: #e7f2ed;
+
+  --secondary: #f1efeb;
+  --secondary-foreground: #2c2925;
+  --muted: #f1efeb;
+  --muted-foreground: #5f5a53; /* 6.4:1 on background */
+  --accent: #e7f2ed;
+  --accent-foreground: #0a5a41;
+
+  --destructive: #b42318;
+  --border: #e4e0da;
+  --input: #d9d4cc;
+  --ring: #0b6e4f;
+
+  /* status (badges, borders) — each pair ≥ 4.5:1 */
+  --status-answered: #0b6e4f;
+  --status-answered-bg: #e7f2ed;
+  --status-partial: #8a5100;
+  --status-partial-bg: #fdf1dc;
+  --status-refused: #475467;
+  --status-refused-bg: #eef0f3;
+  --status-clarify: #1d4ed8;
+  --status-clarify-bg: #e8efff;
+}
+
+.dark {
+  --background: #161513;
+  --foreground: #f1efeb;
+  --card: #1f1d1a;
+  --card-foreground: #f1efeb;
+  --popover: #1f1d1a;
+  --popover-foreground: #f1efeb;
+  --primary: #3fb68b;
+  --primary-foreground: #0b1f17;
+  --primary-soft: #16302a;
+  --secondary: #2a2723;
+  --secondary-foreground: #f1efeb;
+  --muted: #2a2723;
+  --muted-foreground: #b4ada3;
+  --accent: #16302a;
+  --accent-foreground: #b9e6d4;
+  --destructive: #f97066;
+  --border: #34302b;
+  --input: #3d3933;
+  --ring: #3fb68b;
+  --status-answered: #6fd3a8;
+  --status-answered-bg: #16302a;
+  --status-partial: #f5b54a;
+  --status-partial-bg: #33270f;
+  --status-refused: #c3c9d4;
+  --status-refused-bg: #262a31;
+  --status-clarify: #93b4ff;
+  --status-clarify-bg: #18233d;
+}
+
+@theme inline {
+  --font-sans: var(--font-bangla), ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-status-answered: var(--status-answered);
+  --color-status-answered-bg: var(--status-answered-bg);
+  --color-status-partial: var(--status-partial);
+  --color-status-partial-bg: var(--status-partial-bg);
+  --color-status-refused: var(--status-refused);
+  --color-status-refused-bg: var(--status-refused-bg);
+  --color-status-clarify: var(--status-clarify);
+  --color-status-clarify-bg: var(--status-clarify-bg);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    font-size: 17.5px; /* Bangla needs room: body ~17–18px */
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    line-height: 1.7;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

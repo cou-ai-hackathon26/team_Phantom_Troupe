@@ -75,14 +75,14 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 **Goal:** a backend and frontend skeleton that can see Supabase, Qdrant and Groq.
 **Files:** `backend/app/{main.py,core/config.py,core/logging.py,core/constants.py,api/routes/health.py,services/health_service.py}`, `backend/requirements.txt`, `backend/pyproject.toml` (ruff and pytest), `backend/tests/unit/test_health.py`, `backend/scripts/check_connections.py`, `frontend/*`, `README.md`, `.gitignore`, `.env.example`, `infra/docker-compose.yml`.
 
-- [ ] Python 3.12 venv (uv) and pinned `requirements.txt`
-- [ ] Settings via pydantic-settings, reading the root `.env`. Secrets use `SecretStr`.
-- [ ] Structured logging and CORS for `http://localhost:3000`
-- [ ] `GET /api/v1/health` with per-check timeouts (Postgres `SELECT 1`, Qdrant list collections, Groq `models.list`, embedding lazy status)
-- [ ] `scripts/check_connections.py` prints OK/FAIL and never prints keys
-- [ ] Mocked health test
-- [ ] Next.js, Tailwind and shadcn/ui, Hind Siliguri via next/font, `lang="bn"`, home page showing service status
-- [ ] README skeleton, `.gitignore`, `.env.example`, offline docker-compose profile
+- [x] Python 3.12 venv (uv) and pinned `requirements.txt`
+- [x] Settings via pydantic-settings, reading the root `.env`. Secrets use `SecretStr`.
+- [x] Structured logging and CORS for `http://localhost:3000`
+- [x] `GET /api/v1/health` with per-check timeouts (Postgres `SELECT 1`, Qdrant list collections, Groq `models.list`, embedding lazy status)
+- [x] `scripts/check_connections.py` prints OK/FAIL and never prints keys
+- [x] Mocked health test
+- [x] Next.js, Tailwind and shadcn/ui, Hind Siliguri via next/font, `lang="bn"`, home page showing service status
+- [x] README skeleton, `.gitignore`, `.env.example`, offline docker-compose profile
 
 **Test:** `pytest`, `python scripts/check_connections.py`, `uvicorn app.main:app`, `npm run dev`, then open :3000.
 **Done when:** check_connections shows OK for all three services (needs `.env`), uvicorn and npm both run, and the home page shows the statuses.
