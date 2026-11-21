@@ -1,90 +1,142 @@
 import type { Metadata } from "next";
-import { FileSearch, MessageCircleQuestion, ShieldCheck, Sparkles } from "lucide-react";
-import { CorpusSummary } from "@/components/corpus-summary";
-import { EvalSection } from "@/components/eval-section";
+import Link from "next/link";
+import { ArrowRight, BadgeCheck, FileText, HeartHandshake, MessageCircle, Mic, PhoneCall, Quote, ShieldCheck } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
+import { AREAS } from "@/lib/areas";
 
 export const metadata: Metadata = { title: "কীভাবে কাজ করে — অধিকারAI" };
 
 const STEPS = [
-  { icon: MessageCircleQuestion, title: "প্রশ্ন", text: "আপনি নিজের ভাষায় বলেন বা লেখেন: প্রমিত বাংলা, আঞ্চলিক ভাষা, বাংলিশ বা ইংরেজি।" },
-  { icon: FileSearch, title: "নথি খোঁজা", text: "প্রশ্নটি প্রমিত বাংলায় সাজিয়ে অর্থ ও শব্দ, দুইভাবে সরকারি নথিতে খোঁজা হয়।" },
-  { icon: ShieldCheck, title: "যাচাই", text: "উত্তরের প্রতিটি সূত্র ও সংখ্যা মূল নথির সাথে মিলিয়ে দেখা হয়। না মিললে সতর্ক করা হয়।" },
-  { icon: Sparkles, title: "উত্তর", text: "সহজ বাংলায় ধাপে ধাপে উত্তর, সাথে সূত্র। নথিতে না থাকলে সরাসরি জানিয়ে দেওয়া হয়।" },
+  {
+    icon: Mic,
+    title: "প্রশ্ন করুন",
+    text: "যে ভাষায় স্বচ্ছন্দ, সেভাবেই লিখুন বা মাইকে বলুন। প্রমিত বাংলা, আঞ্চলিক ভাষা, বাংলিশ বা ইংরেজি, সবই চলবে।",
+  },
+  {
+    icon: MessageCircle,
+    title: "সহজ উত্তর পান",
+    text: "অধিকারAI সরকারি আইন ও নথি পড়ে আপনার প্রশ্নের উত্তর সহজ বাংলায়, দরকার হলে ধাপে ধাপে সাজিয়ে দেয়।",
+  },
+  {
+    icon: FileText,
+    title: "সূত্র দেখে নিশ্চিত হন",
+    text: "উত্তরের প্রতিটি তথ্যের পাশে সূত্র থাকে। চাপ দিলেই আইনের মূল লেখাটি দেখতে পাবেন।",
+  },
 ];
 
-const CREDITS = [
-  ["মডেল ও সেবা", "intfloat/multilingual-e5-base (লোকাল এমবেডিং) · Groq (LLM ও Whisper) · Tavily (ওয়েব সার্চ, শুধু সরকারি সাইট) · Supabase PostgreSQL · Qdrant Cloud · ব্রাউজারের Web Speech API"],
-  ["ব্যাকএন্ড", "FastAPI · Pydantic · SQLAlchemy · asyncpg · qdrant-client · sentence-transformers · PyTorch · rank-bm25 · PyMuPDF · Tesseract OCR · EasyOCR"],
-  ["তথ্যের উৎস", "bdlaws.minlaw.gov.bd (আইন ও সংবিধান) · ভূমি মন্ত্রণালয় · সমাজসেবা অধিদফতর · বাংলাদেশ পুলিশ · জাতীয় মানবাধিকার কমিশন"],
-  ["ফ্রন্টএন্ড", "Next.js · React · TypeScript · Tailwind CSS · shadcn/ui · Radix UI · lucide-react · Hind Siliguri ফন্ট"],
-  ["এআই কোডিং সহকারী", "Claude Code (Anthropic)"],
+const PROMISES = [
+  { icon: ShieldCheck, title: "শুধু সরকারি নথি", text: "উত্তর আসে আইন, বিধিমালা ও সরকারি নির্দেশিকা থেকে; অনুমান থেকে নয়।" },
+  { icon: Quote, title: "প্রতিটি উত্তরে সূত্র", text: "কোন আইনের কোন ধারা থেকে তথ্যটি এসেছে, তা সবসময় দেখানো হয়।" },
+  { icon: PhoneCall, title: "না জানলে সরাসরি বলে", text: "নথিতে উত্তর না পেলে ভুল তথ্য না দিয়ে জাতীয় হেল্পলাইন ৩৩৩-এর পরামর্শ দেয়।" },
+  { icon: BadgeCheck, title: "ওয়েবের তথ্য আলাদা করে চেনানো", text: "কখনো সরকারি ওয়েবসাইট থেকে তথ্য নিলে তা আলাদা চিহ্নে দেখায়, লিংকসহ।" },
 ];
 
 export default function AboutPage() {
   return (
-    <main className="mx-auto max-w-4xl space-y-10 px-4 py-6 sm:py-10">
-      <section className="animate-fade-up space-y-2">
-        <h1 className="text-2xl font-bold sm:text-3xl">অধিকারAI কীভাবে কাজ করে</h1>
-        <p className="text-muted-foreground">
-          অধিকারAI শুধু সরকারি আইন ও নথি থেকে উত্তর দেয় এবং প্রতিটি উত্তরের সাথে সূত্র দেখায়। নথিতে উত্তর না থাকলে অনুমান
-          না করে জাতীয় হেল্পলাইন ৩৩৩-এর কথা বলে।
+    <main className="mx-auto max-w-4xl px-4 py-10 sm:py-16">
+      {/* intro */}
+      <section className="animate-fade-up text-center">
+        <BrandMark className="mx-auto size-14 [border-radius:1rem]" />
+        <h1 className="mt-5 text-[1.85rem] leading-tight font-bold tracking-tight sm:text-4xl">
+          আইনের ভাষা, <span className="text-primary">আপনার ভাষায়</span>
+        </h1>
+        <p className="mx-auto mt-3 max-w-xl text-muted-foreground sm:text-lg">
+          জমি, থানা, সরকারি ভাতা বা কর্মক্ষেত্রের অধিকার নিয়ে প্রশ্ন থাকলে আর আইনের মোটা বই ঘাঁটতে হবে না। প্রশ্ন করুন,
+          অধিকারAI সরকারি নথি থেকে উত্তর খুঁজে দেবে।
         </p>
       </section>
 
-      <section aria-labelledby="steps-heading" className="space-y-4">
-        <h2 id="steps-heading" className="text-xl font-semibold">চার ধাপে উত্তর</h2>
-        <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map((step, i) => {
-            const Icon = step.icon;
-            return (
-              <li key={step.title} className="relative rounded-2xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-card">
-                <span className="flex size-10 items-center justify-center rounded-lg bg-primary-soft text-primary">
-                  <Icon className="size-5" aria-hidden />
+      {/* steps */}
+      <section aria-labelledby="steps-heading" className="mt-14 sm:mt-20">
+        <h2 id="steps-heading" className="text-center text-2xl font-bold">
+          তিনটি সহজ ধাপ
+        </h2>
+        <ol className="relative mt-8 grid gap-4 sm:grid-cols-3 sm:gap-6">
+          {STEPS.map(({ icon: Icon, title, text }, i) => (
+            <li
+              key={title}
+              className="relative animate-fade-up rounded-3xl border bg-card p-6 shadow-card"
+              style={{ animationDelay: `${100 + i * 90}ms` }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex size-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                  <Icon className="size-6" aria-hidden />
                 </span>
-                <h3 className="mt-3 font-semibold">
-                  {["১", "২", "৩", "৪"][i]}. {step.title}
-                </h3>
-                <p className="mt-1 text-[0.95rem] text-muted-foreground">{step.text}</p>
-              </li>
-            );
-          })}
+                <span className="text-4xl font-bold text-primary/15" aria-hidden>
+                  {["১", "২", "৩"][i]}
+                </span>
+              </div>
+              <h3 className="mt-4 text-lg font-semibold">{title}</h3>
+              <p className="mt-1 text-[0.97rem] text-muted-foreground">{text}</p>
+            </li>
+          ))}
         </ol>
       </section>
 
-      <section aria-labelledby="data-heading" className="space-y-3">
-        <h2 id="data-heading" className="text-xl font-semibold">তথ্যের উৎস</h2>
-        <p className="text-muted-foreground">
-          আইন ও বিচার বিভাগের ওয়েবসাইট (bdlaws.minlaw.gov.bd), ভূমি মন্ত্রণালয়, সমাজসেবা অধিদফতর, বাংলাদেশ পুলিশ ও জাতীয়
-          মানবাধিকার কমিশনের প্রকাশিত আইন, বিধিমালা, নীতিমালা ও নির্দেশিকা। স্থানীয় নথিতে উত্তর না পেলে নির্দিষ্ট সরকারি ওয়েবসাইটে
-          খোঁজা হয়, এবং সেই উত্তরে আলাদা চিহ্ন ও যাচাইয়ের সতর্কতা থাকে।
-        </p>
-        <CorpusSummary />
-      </section>
-
-      <EvalSection />
-
-      <section aria-labelledby="limits-heading" className="space-y-3">
-        <h2 id="limits-heading" className="text-xl font-semibold">সীমাবদ্ধতা</h2>
-        <ul className="list-disc space-y-1.5 pl-5 text-[0.98rem]">
-          <li>এটি আইনি পরামর্শ নয়। গুরুত্বপূর্ণ সিদ্ধান্তের আগে সংশ্লিষ্ট অফিস বা আইনজীবীর সাথে কথা বলুন।</li>
-          <li>উত্তর যুক্ত করা নথি (এবং প্রয়োজনে নির্দিষ্ট সরকারি ওয়েবসাইট) থেকে আসে; সাম্প্রতিক পরিবর্তন এতে নাও থাকতে পারে।</li>
-          <li>পুরনো সরকারি নথিতে লেখার কিছু ত্রুটি থাকতে পারে। সন্দেহ হলে মূল উৎস খুলে দেখুন।</li>
-          <li>আপনার প্রশ্ন বা কথোপকথন সংরক্ষণ করা হয় না; ব্যক্তিগত তথ্য (এনআইডি, ফোন নম্বর) দেবেন না।</li>
+      {/* topics */}
+      <section aria-labelledby="topics-heading" className="mt-14 sm:mt-20">
+        <h2 id="topics-heading" className="text-center text-2xl font-bold">
+          যে বিষয়ে জানতে পারবেন
+        </h2>
+        <ul className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {AREAS.map(({ id, icon: Icon, label, description }) => (
+            <li key={id} className="flex items-start gap-3 rounded-2xl border bg-card p-4">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
+                <Icon className="size-5" aria-hidden />
+              </span>
+              <div>
+                <h3 className="font-semibold">{label}</h3>
+                <p className="text-sm text-muted-foreground">{description}</p>
+              </div>
+            </li>
+          ))}
         </ul>
       </section>
 
-      <section aria-labelledby="credits-heading" className="space-y-3">
-        <h2 id="credits-heading" className="text-xl font-semibold">কৃতজ্ঞতা</h2>
-        <dl className="space-y-2">
-          {CREDITS.map(([k, v]) => (
-            <div key={k} className="rounded-2xl border bg-card p-4">
-              <dt className="font-semibold">{k}</dt>
-              <dd className="text-[0.95rem] text-muted-foreground">{v}</dd>
-            </div>
+      {/* trust */}
+      <section aria-labelledby="trust-heading" className="mt-14 rounded-3xl border bg-card p-6 shadow-card sm:mt-20 sm:p-10">
+        <div className="flex items-center gap-2 text-primary">
+          <HeartHandshake className="size-6" aria-hidden />
+          <h2 id="trust-heading" className="text-2xl font-bold text-foreground">
+            কেন ভরসা করবেন
+          </h2>
+        </div>
+        <ul className="mt-6 grid gap-6 sm:grid-cols-2">
+          {PROMISES.map(({ icon: Icon, title, text }) => (
+            <li key={title} className="flex gap-3">
+              <Icon className="mt-1 size-5 shrink-0 text-primary" aria-hidden />
+              <div>
+                <h3 className="font-semibold">{title}</h3>
+                <p className="text-[0.97rem] text-muted-foreground">{text}</p>
+              </div>
+            </li>
           ))}
-        </dl>
-        <p className="text-muted-foreground">
-          তৈরি করেছে <span className="font-semibold text-foreground">টিম Phantom Troupe</span>, CoU AI Hackathon ২০২৬।
+        </ul>
+      </section>
+
+      {/* keep in mind */}
+      <section aria-labelledby="note-heading" className="mt-10 rounded-2xl bg-status-partial-bg p-5 text-status-partial">
+        <h2 id="note-heading" className="font-semibold">
+          মনে রাখবেন
+        </h2>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-[0.97rem]">
+          <li>এটি আইনি পরামর্শ নয়। গুরুত্বপূর্ণ সিদ্ধান্তের আগে সংশ্লিষ্ট অফিস বা আইনজীবীর সাথে কথা বলুন।</li>
+          <li>আইন ও নিয়ম বদলাতে পারে; সন্দেহ হলে সূত্রে দেওয়া মূল লেখা দেখে নিন।</li>
+          <li>প্রশ্নে এনআইডি নম্বর, ফোন নম্বর বা অন্য ব্যক্তিগত তথ্য দেবেন না।</li>
+        </ul>
+      </section>
+
+      {/* call to action */}
+      <section className="mt-14 text-center sm:mt-20">
+        <h2 className="text-2xl font-bold">আপনার প্রশ্নটি কী?</h2>
+        <Link
+          href="/"
+          className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-lg font-semibold text-primary-foreground shadow-card transition-all hover:gap-3 hover:bg-primary/90 active:scale-95"
+        >
+          প্রশ্ন করুন <ArrowRight className="size-5" aria-hidden />
+        </Link>
+        <p className="mt-10 text-sm text-muted-foreground">
+          তৈরি করেছে টিম Phantom Troupe · CoU AI Hackathon ২০২৬
         </p>
       </section>
     </main>

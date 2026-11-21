@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, MessageSquarePlus } from "lucide-react";
 import { AnswerCard } from "@/components/chat/answer-card";
 import { AnswerError, AnswerSkeleton, UserBubble } from "@/components/chat/answer-states";
-import { AreaCards } from "@/components/chat/area-cards";
 import { CitationSheet, type SourceView } from "@/components/chat/citation-sheet";
 import { Composer } from "@/components/chat/composer";
+import { Welcome } from "@/components/chat/welcome";
 import { MicButton, VoiceLangToggle } from "@/components/chat/mic-button";
 import { AttachButton, PersonalDocChip } from "@/components/chat/personal-doc";
 import { useSpeechInput } from "@/hooks/use-speech-input";
@@ -39,6 +39,7 @@ export default function ChatPage() {
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const [awayFromEnd, setAwayFromEnd] = useState(false);
+  const [debug, setDebug] = useState(false); // retrieval trace for demos: open the page with ?debug
   const busy = turns.some((t) => t.state === "loading");
   const [showMicHint, setShowMicHint] = useState(false);
   const [doc, setDoc] = useState<UserDocInfo | null>(null);
@@ -76,6 +77,10 @@ export default function ChatPage() {
   });
 
   useEffect(() => {
+    setDebug(new URLSearchParams(window.location.search).has("debug"));
+  }, []);
+
+  useEffect(() => {
     try {
       setShowMicHint(window.localStorage.getItem("adhikarai.micHintSeen") !== "1");
     } catch {
@@ -96,7 +101,7 @@ export default function ChatPage() {
   const run = useCallback(async (id: number, question: string, docId?: string) => {
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "loading", error: undefined } : t)));
     try {
-      const response = await askQuestion({ message: question, debug: true, user_doc_id: docId });
+      const response = await askQuestion({ message: question, debug, user_doc_id: docId });
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "done", response } : t)));
       setAnnounce(`${STATUS_ANNOUNCE[response.status]}। ${response.answer}`);
     } catch (err) {
@@ -105,7 +110,7 @@ export default function ChatPage() {
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "error", error: message } : t)));
       setAnnounce(message);
     }
-  }, []);
+  }, [debug]);
 
   const ask = useCallback(
     (raw: string) => {
@@ -167,38 +172,82 @@ export default function ChatPage() {
       .catch(() => setSource((cur) => (cur?.citation === c.citation ? { ...base, loading: false } : cur)));
   };
 
+  const empty = turns.length === 0;
+  const composer = (
+    <Composer
+      inline={empty}
+      value={input}
+      onChange={setInput}
+      onSubmit={() => ask(input)}
+      busy={busy}
+      mic={<MicButton state={voice.state} onStart={startVoice} onStop={voice.stop} disabled={busy} />}
+      lang={<VoiceLangToggle lang={voice.lang} onChange={voice.setLang} disabled={voice.state !== "idle"} />}
+      attach={<AttachButton onPick={(f) => void attachDoc(f)} busy={docUploading !== null} disabled={busy} />}
+      top={
+        <PersonalDocChip
+          doc={doc}
+          uploading={docUploading}
+          error={docError}
+          onRemove={removeDoc}
+          onDismissError={() => setDocError(null)}
+        />
+      }
+      hint={
+        <VoiceStatus
+          state={voice.state}
+          interim={voice.interim}
+          error={voice.error}
+          elapsed={voice.elapsed}
+          maxSeconds={voice.maxSeconds}
+          showHint={showMicHint && voice.mode !== "none"}
+          onDismissError={voice.clearError}
+        />
+      }
+    />
+  );
+
+  if (empty) {
+    return (
+      <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
+        <main className="flex flex-1 flex-col justify-center px-4 py-8 sm:py-12">
+          <Welcome onAsk={ask} disabled={busy} composer={composer} />
+        </main>
+        <p className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground">
+          এটি আইনি পরামর্শ নয়; তথ্য যাচাই করতে সংশ্লিষ্ট অফিসে যোগাযোগ করুন।
+        </p>
+        <CitationSheet source={source} onOpenChange={(open) => !open && setSource(null)} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">
-        {turns.length === 0 ? (
-          <AreaCards onAsk={ask} disabled={busy} />
-        ) : (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                {toBnDigits(turns.length)}টি প্রশ্ন · কথোপকথন কোথাও সংরক্ষণ হয় না
-              </p>
-              <button
-                type="button"
-                onClick={newChat}
-                disabled={busy}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-sm font-medium shadow-card transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-60"
-              >
-                <MessageSquarePlus className="size-4" aria-hidden /> নতুন প্রশ্ন
-              </button>
-            </div>
-            {turns.map((turn) => (
-              <div key={turn.id} className="space-y-3">
-                <UserBubble text={turn.question} attachment={turn.docName} />
-                {turn.state === "loading" && <AnswerSkeleton />}
-                {turn.state === "error" && (
-                  <AnswerError message={turn.error ?? ""} onRetry={() => void run(turn.id, turn.question, turn.docId)} />
-                )}
-                {turn.state === "done" && turn.response && <AnswerCard response={turn.response} onCite={openCitation} />}
-              </div>
-            ))}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {toBnDigits(turns.length)}টি প্রশ্ন
+            </p>
+            <button
+              type="button"
+              onClick={newChat}
+              disabled={busy}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-sm font-medium shadow-card transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-60"
+            >
+              <MessageSquarePlus className="size-4" aria-hidden /> নতুন প্রশ্ন
+            </button>
           </div>
-        )}
+          {turns.map((turn) => (
+            <div key={turn.id} className="space-y-3">
+              <UserBubble text={turn.question} attachment={turn.docName} />
+              {turn.state === "loading" && <AnswerSkeleton />}
+              {turn.state === "error" && (
+                <AnswerError message={turn.error ?? ""} onRetry={() => void run(turn.id, turn.question, turn.docId)} />
+              )}
+              {turn.state === "done" && turn.response && <AnswerCard response={turn.response} onCite={openCitation} />}
+            </div>
+          ))}
+        </div>
         <div ref={endRef} className="h-px" />
         <p className="sr-only" aria-live="polite">
           {announce}
@@ -206,7 +255,7 @@ export default function ChatPage() {
       </main>
 
       <div className="sticky bottom-0 z-20">
-        {awayFromEnd && turns.length > 0 && (
+        {awayFromEnd && (
           <button
             type="button"
             onClick={scrollToEnd}
@@ -216,35 +265,7 @@ export default function ChatPage() {
             <ArrowDown className="size-5" aria-hidden />
           </button>
         )}
-        <Composer
-          value={input}
-          onChange={setInput}
-          onSubmit={() => ask(input)}
-          busy={busy}
-          mic={<MicButton state={voice.state} onStart={startVoice} onStop={voice.stop} disabled={busy} />}
-          lang={<VoiceLangToggle lang={voice.lang} onChange={voice.setLang} disabled={voice.state !== "idle"} />}
-          attach={<AttachButton onPick={(f) => void attachDoc(f)} busy={docUploading !== null} disabled={busy} />}
-          top={
-            <PersonalDocChip
-              doc={doc}
-              uploading={docUploading}
-              error={docError}
-              onRemove={removeDoc}
-              onDismissError={() => setDocError(null)}
-            />
-          }
-          hint={
-            <VoiceStatus
-              state={voice.state}
-              interim={voice.interim}
-              error={voice.error}
-              elapsed={voice.elapsed}
-              maxSeconds={voice.maxSeconds}
-              showHint={showMicHint && voice.mode !== "none"}
-              onDismissError={voice.clearError}
-            />
-          }
-        />
+        {composer}
       </div>
 
       <CitationSheet source={source} onOpenChange={(open) => !open && setSource(null)} />

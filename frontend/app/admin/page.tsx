@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ExternalLink, Eye, LoaderCircle, LockKeyhole, LogOut, Trash2, Upload, XCircle } from "lucide-react";
+import Link from "next/link";
+import { BookOpenText, CheckCircle2, ExternalLink, Eye, LoaderCircle, LockKeyhole, LogOut, Trash2, Upload, XCircle } from "lucide-react";
+import { EvalSection } from "@/components/eval-section";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AREAS, areaLabel } from "@/lib/areas";
 import {
@@ -222,9 +224,14 @@ function Dashboard({
             {info && ` · মডেল: ${info.llm_model ?? "LLM_MODEL সেট করা নেই"} · এমবেডিং: ${info.embedding_model}`}
           </p>
         </div>
-        <button type="button" onClick={onLogout} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-secondary">
-          <LogOut className="size-4" aria-hidden /> বের হন
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/sources" className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-secondary">
+            <BookOpenText className="size-4" aria-hidden /> নথিসমূহ
+          </Link>
+          <button type="button" onClick={onLogout} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-secondary">
+            <LogOut className="size-4" aria-hidden /> বের হন
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -329,6 +336,11 @@ function Dashboard({
           )}
         </SheetContent>
       </Sheet>
+
+      {/* system metrics live here, not on the public pages */}
+      <div className="rounded-xl border bg-card p-4 sm:p-5">
+        <EvalSection />
+      </div>
     </main>
   );
 }

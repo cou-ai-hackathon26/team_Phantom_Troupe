@@ -14,10 +14,11 @@ interface ComposerProps {
   attach?: ReactNode; // personal-document button
   top?: ReactNode; // attached-document chip
   hint?: ReactNode;
+  inline?: boolean; // inside the welcome screen instead of pinned to the bottom
 }
 
 /** Message box: full-width text area on top, tools and send button in a row below (works at phone width). */
-export function Composer({ value, onChange, onSubmit, busy, mic, lang, attach, top, hint }: ComposerProps) {
+export function Composer({ value, onChange, onSubmit, busy, mic, lang, attach, top, hint, inline }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   // grow with content up to ~5 lines
@@ -38,8 +39,8 @@ export function Composer({ value, onChange, onSubmit, busy, mic, lang, attach, t
   const canSend = value.trim().length >= 2 && !busy;
 
   return (
-    <div className="bg-gradient-to-t from-background via-background/95 to-transparent pt-4">
-      <div className="mx-auto max-w-3xl px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] sm:px-4">
+    <div className={inline ? "" : "bg-gradient-to-t from-background via-background/95 to-transparent pt-4"}>
+      <div className={inline ? "" : "mx-auto max-w-3xl px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] sm:px-4"}>
         {top}
         <form
           className="group rounded-3xl border bg-card p-2 shadow-card transition-shadow focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10"
@@ -90,9 +91,11 @@ export function Composer({ value, onChange, onSubmit, busy, mic, lang, attach, t
           </div>
         </form>
         {hint}
-        <p className="mt-1.5 text-center text-[0.72rem] text-muted-foreground sm:text-xs">
-          এটি আইনি পরামর্শ নয়; তথ্য যাচাই করতে সংশ্লিষ্ট অফিসে যোগাযোগ করুন।
-        </p>
+        {!inline && (
+          <p className="mt-1.5 text-center text-[0.72rem] text-muted-foreground sm:text-xs">
+            এটি আইনি পরামর্শ নয়; তথ্য যাচাই করতে সংশ্লিষ্ট অফিসে যোগাযোগ করুন।
+          </p>
+        )}
       </div>
     </div>
   );

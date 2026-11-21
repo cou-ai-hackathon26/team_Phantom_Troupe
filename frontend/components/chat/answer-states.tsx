@@ -1,23 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, FileText, RefreshCw, Scale, TriangleAlert } from "lucide-react";
+import { Check, FileText, RefreshCw, TriangleAlert } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 /** The assistant's round mark, shown beside every answer. */
 export function AssistantAvatar({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#0f8a63] text-primary-foreground shadow-card sm:size-9",
-        className,
-      )}
-      aria-hidden
-    >
-      <Scale className="size-4" />
-    </span>
-  );
+  return <BrandMark className={cn("size-8 rounded-[0.6rem] shadow-card sm:size-9", className)} />;
 }
 
 // what the pipeline is doing; advanced on a timer (the API answers in one response)
