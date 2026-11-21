@@ -21,6 +21,17 @@ _BARE_MARKER = re.compile(r"\[\s*[0-9০-৯]{1,2}\s*\]")  # "[৫]" written by 
 _REPEATED_MARKER = re.compile(r"(\[[০-৯]+\])(?:\s*\1)+")
 EXCERPT_CHARS = 320
 
+# Number words common in Bangladeshi legal text ("আট কিলোমিটার", "তিন মাস"). Evidence side only: a
+# correct digit in the answer ("৮") then matches a number written in words in the source.
+BN_NUMBER_WORDS = {
+    "এক": 1, "দুই": 2, "তিন": 3, "চার": 4, "পাঁচ": 5, "ছয়": 6, "সাত": 7, "আট": 8, "নয়": 9, "দশ": 10,
+    "এগার": 11, "এগারো": 11, "বার": 12, "বারো": 12, "তের": 13, "তেরো": 13, "চৌদ্দ": 14, "পনের": 15, "পনেরো": 15,
+    "ষোল": 16, "সতের": 17, "আঠার": 18, "আঠারো": 18, "উনিশ": 19, "বিশ": 20, "কুড়ি": 20, "পঁচিশ": 25,
+    "ত্রিশ": 30, "চল্লিশ": 40, "পঁয়তাল্লিশ": 45, "পঞ্চাশ": 50, "ষাট": 60, "সত্তর": 70, "আশি": 80, "নব্বই": 90,
+    "একশ": 100, "একশত": 100,
+}  # fmt: skip
+_WORD = re.compile(r"[\u0980-\u09ff]+")
+
 NUMERIC_WARNING = "উত্তরের কিছু সংখ্যা ({numbers}) সূত্রে হুবহু পাওয়া যায়নি — মূল সূত্র দেখে নিশ্চিত হোন।"
 
 
@@ -53,6 +64,14 @@ def numbers_in(text: str) -> set[str]:
         n = bn_to_ascii_digits(m.group(0)).replace(",", "").rstrip(".")
         out.add(n.lstrip("0") or "0")  # compare by value: the source writes "০৬", answers write "৬"
     return out
+
+
+def number_words_in(text: str) -> set[str]:
+    """Values of Bangla number words, so "আট" in the source supports "৮" in the answer."""
+    import unicodedata
+
+    words = {unicodedata.normalize("NFC", k): v for k, v in BN_NUMBER_WORDS.items()}
+    return {str(words[w]) for w in _WORD.findall(unicodedata.normalize("NFC", text)) if w in words}
 
 
 def _excerpt(text: str) -> str:
@@ -102,7 +121,7 @@ def validate_answer(output: AnswerOutput, labelled: dict[str, ChunkRecord]) -> V
     warnings: list[str] = []
     status = "answered"
     evidence = " ".join(normalize_for_search(labelled[lb].embedding_text()) for lb in order)
-    evidence_numbers = numbers_in(evidence)
+    evidence_numbers = numbers_in(evidence) | number_words_in(evidence)
     plain = _BARE_MARKER.sub(" ", _MARKER_GROUP.sub(" ", output.answer))
     unsupported = sorted(n for n in numbers_in(plain) if n not in evidence_numbers)
     # the rewritten "[১]" markers are not numbers in the answer

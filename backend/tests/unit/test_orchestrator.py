@@ -243,3 +243,14 @@ def test_wrong_area_with_no_documents_falls_back_to_all_areas() -> None:
     resp = ask(make(llm), debug=True)
     assert resp.status == "answered"
     assert resp.trace is not None and resp.trace.candidates
+
+
+def test_number_words_in_source_support_digits_in_answer() -> None:
+    # real case: §18 says "আট কিলোমিটার", the answer said "৮ কিমি"
+    chunk = _chunk("t-s18", "১৮", "একই শহরে বা গ্রামে অথবা আট কিলোমিটার দূরত্বের মধ্যে")
+    v = validate_answer(
+        AnswerOutput(answer="৮ কিমি দূরত্বের মধ্যে [C1]", used_chunk_ids=["C1"], found=True), {"C1": chunk}
+    )
+    assert v.status == "answered" and not v.warnings
+    v2 = validate_answer(AnswerOutput(answer="৯ কিমি [C1]", used_chunk_ids=["C1"], found=True), {"C1": chunk})
+    assert v2.status == "partial"

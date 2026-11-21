@@ -202,10 +202,24 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
   - Banglish service-book question was misclassified as land and found no documents → domain terms added to the prompt, plus a fallback to all areas when the classified area has no candidates
   - "section 4 … probation" got `found=false` despite perfect retrieval → Call 1 maps everyday and English words to statutory Bangla terms (probation → শিক্ষানবিশীকাল), and Call 2 matches by meaning
   - false `partial`: the source says `০৬`, the answer said `৬` → numbers compared by value
+  - false `partial`: the source says `আট কিলোমিটার` (in words), the answer said `৮ কিমি` → the validator reads common Bangla number words in the source (fixed after the final run)
 - [ ] Fill in `expected_chunk_ids`, `must_include` and `must_not_include` in `data/evaluation/gold.jsonl` (human task), then run `run_eval.py` again to get Recall@5, MRR and coverage
-- [ ] Rerun with 15 s spacing (in progress 21 Nov), then update the numbers below
+- [x] Rerun with 15 s spacing (21 Nov). Results are below and in `data/evaluation/results.json`.
 
-**Measured (21 Nov, `openai/gpt-oss-20b`, 24 questions, after the fixes, 3 s spacing):** 11/11 labour questions answered (10 answered, 1 partial, later fixed); 9/9 land, GD and allowance questions refused (no documents yet, and no false answers even after falling back to labour documents); off-topic refused 4/4, false-answer rate 0/4; area detection 20/20; citation validity 16/16. Latency p50 17.7 s / p95 24.8 s, inflated by Groq free-tier TPM throttling with back-to-back rows. Single questions spaced 20 s apart took 2.2–2.4 s. Recall@5, MRR and coverage are n/a until the gold set is labelled. Score-gate trade-off: at 0.80 the gate alone blocks 3/4 off-topic questions (Call 1 already refuses all 4).
+**Measured (21 Nov, `openai/gpt-oss-20b`, 24 questions, 15 s spacing; `data/evaluation/results.json`):**
+
+| Metric | Result | n |
+|---|---|---|
+| Labour questions answered | 11/11 (10 answered, 1 partial*) | 11 |
+| Land, GD and allowance questions refused (no documents yet) | 9/9, no false answers | 9 |
+| Off-topic correctly refused | 100% | 4 |
+| False-answer rate | 0% | 4 |
+| Area detection | 100% | 20 |
+| Citation validity | 100% | 15 |
+| Latency p50 / p95 | 2.4 s / 4.6 s | 24 |
+| Recall@5, MRR, must_include coverage | n/a (gold set unlabelled) | 0 |
+
+\* The one `partial` was a validator false positive (`আট` vs `৮`), fixed after the run. With 3 s spacing the same run measured p50 17.7 s / p95 24.8 s, because of Groq free-tier TPM throttling. Score-gate trade-off: at 0.80 the gate alone blocks 3/4 off-topic questions (Call 1 already refuses all 4).
 
 **Done when:** run_eval completes on the filled gold set and `/about` shows the table. (`/about` shows the table now; the gold set still needs labels.)
 
