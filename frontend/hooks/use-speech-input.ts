@@ -58,6 +58,13 @@ function getSpeechCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+// Brave (and some other Chromium builds) expose the Web Speech API but have no access to Google's
+// speech service: every attempt ends in a "network" error. Use the Whisper recorder there from the start.
+function browserSpeechUnusable(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return "brave" in navigator;
+}
+
 function pickMimeType(): string | undefined {
   if (typeof MediaRecorder === "undefined") return undefined;
   return ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"].find((t) =>
@@ -87,6 +94,8 @@ export function useSpeechInput(onFinal: (text: string) => void) {
     tick?: ReturnType<typeof setInterval>;
   }>({});
   const finalText = useRef("");
+  const networkFailed = useRef(false);
+  const startRecorderRef = useRef<() => Promise<void>>(async () => undefined);
   const onFinalRef = useRef(onFinal);
   onFinalRef.current = onFinal;
 
@@ -113,7 +122,7 @@ export function useSpeechInput(onFinal: (text: string) => void) {
   }, []);
 
   useEffect(() => {
-    if (getSpeechCtor()) setMode("speech");
+    if (getSpeechCtor() && !browserSpeechUnusable()) setMode("speech");
     else if (typeof MediaRecorder !== "undefined" && "mediaDevices" in navigator) setMode("recorder");
     else setMode("none");
   }, []);
@@ -152,14 +161,24 @@ export function useSpeechInput(onFinal: (text: string) => void) {
     };
     rec.onerror = (e) => {
       if (e.error === "aborted") return;
-      // stay on the browser recognizer: Whisper (the recorder path) is weaker for Bangla and needs
-      // the internet just the same, so a network hiccup is retried here on the next tap
+      if (e.error === "network" && typeof MediaRecorder !== "undefined") {
+        // the browser's speech service is unreachable (often a browser without Google's service):
+        // switch to our Whisper recorder and start recording right away — no second tap needed
+        networkFailed.current = true;
+        return;
+      }
       setError(SPEECH_ERRORS[e.error] ?? "ভয়েস চিনতে সমস্যা হয়েছে। আবার বলুন অথবা প্রশ্নটি লিখুন।");
     };
     rec.onend = () => {
       clearTimers();
       setState("idle");
       setInterim("");
+      if (networkFailed.current) {
+        networkFailed.current = false;
+        setMode("recorder");
+        void startRecorderRef.current();
+        return;
+      }
       const text = finalText.current.trim();
       if (text) onFinalRef.current(text);
     };
@@ -209,6 +228,8 @@ export function useSpeechInput(onFinal: (text: string) => void) {
     timers.current.tick = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 250);
     timers.current.stop = setTimeout(() => rec.state !== "inactive" && rec.stop(), MAX_RECORD_MS);
   }, []);
+
+  startRecorderRef.current = startRecorder;
 
   const start = useCallback(() => {
     if (mode === "speech") startSpeech();

@@ -19,6 +19,12 @@ from app.services.audio_utils import wav_16k_mono
 logger = logging.getLogger(__name__)
 
 DOMAIN_WORDS = "নামজারি, খতিয়ান, খাজনা, জিডি, থানা, বয়স্ক ভাতা, বিধবা ভাতা, প্রতিবন্ধী ভাতা, শ্রম আইন"
+# Whisper imitates the style of its prompt: a natural Bangla question in Bangla script (with the domain
+# words) steers it to standard Bangla spelling better than a bare word list. Example phrasing only, no facts.
+BN_PROMPT = (
+    "আমি একটি প্রশ্ন করতে চাই। জমির নামজারি ও খতিয়ান, খাজনা, থানায় জিডি, বয়স্ক ভাতা, বিধবা ভাতা, "
+    "প্রতিবন্ধী ভাতা, ফ্যামিলি কার্ড এবং শ্রম আইন নিয়ে আমার প্রশ্ন।"
+)
 
 _DOMAIN_SET = {w.strip() for w in DOMAIN_WORDS.split(",")}
 
@@ -26,7 +32,11 @@ _DOMAIN_SET = {w.strip() for w in DOMAIN_WORDS.split(",")}
 def is_prompt_echo(text: str) -> bool:
     """Whisper hallucinates prompt words on non-speech audio (seen: a pure tone -> "প্রতিবন্ধী ভাতা")."""
     parts = [p.strip(" ।,.?!") for p in re.split(r"[,،।\n]+", text) if p.strip(" ।,.?!")]
-    return bool(parts) and all(p in _DOMAIN_SET for p in parts)
+    if parts and all(p in _DOMAIN_SET for p in parts):
+        return True
+    # or it repeats the prompt sentence itself
+    squash = re.sub(r"[\s।,.?!]+", "", text)
+    return len(squash) > 10 and squash in re.sub(r"[\s।,.?!]+", "", BN_PROMPT)
 
 
 _SUFFIX_BY_TYPE = {
@@ -62,7 +72,7 @@ async def _whisper(wav_bytes: bytes, language: str = "bn") -> str:
                 model=settings.stt_model,
                 language=language,
                 temperature=0,
-                prompt=DOMAIN_WORDS if language == "bn" else None,
+                prompt=BN_PROMPT if language == "bn" else None,
                 response_format="json",
             )
             return (result.text or "").strip()

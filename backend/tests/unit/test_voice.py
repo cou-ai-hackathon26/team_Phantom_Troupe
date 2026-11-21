@@ -135,3 +135,8 @@ def test_transcribe_passes_chosen_language(monkeypatch) -> None:
         "/api/v1/chat/voice/transcribe", files={"audio": ("r.wav", tone_wav(), "audio/wav")}, data={"language": "fr"}
     )
     assert bad.status_code == 422
+
+
+def test_prompt_sentence_echo_is_discarded() -> None:
+    assert stt_service.is_prompt_echo("আমি একটি প্রশ্ন করতে চাই।")
+    assert not stt_service.is_prompt_echo("আমি কি ফ্যামিলি কার্ড পাব?")
