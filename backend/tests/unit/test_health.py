@@ -52,3 +52,16 @@ def test_health_route(monkeypatch) -> None:
     body = resp.json()
     assert body["status"] == "degraded"
     assert body["services"]["postgres"]["ok"] is True
+
+
+def test_async_url_forces_asyncpg() -> None:
+    from app.db.session import async_url
+
+    assert async_url("postgresql://u:p@h:5432/db") == "postgresql+asyncpg://u:p@h:5432/db"
+    assert async_url("postgres://u:p@h/db") == "postgresql+asyncpg://u:p@h/db"
+    assert async_url("postgresql+asyncpg://u:p@h/db") == "postgresql+asyncpg://u:p@h/db"
+    # unescaped '@' in the password is encoded; an already-encoded one is left alone
+    assert async_url("postgresql://user.ref:pa@ss1@host.example:5432/postgres") == (
+        "postgresql+asyncpg://user.ref:pa%40ss1@host.example:5432/postgres"
+    )
+    assert async_url("postgresql://u:pa%40ss@h/db") == "postgresql+asyncpg://u:pa%40ss@h/db"

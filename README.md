@@ -24,6 +24,38 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requi
 cd frontend && npm install && npm run dev        # http://localhost:3000
 ```
 
+## Data and ingestion
+
+Source documents live in `data/<folder>/` (registered in `backend/app/ingestion/area_map.py`). Right now that's the Bangladesh Labour Act 2006 (21 section PDFs from bdlaws.minlaw.gov.bd).
+
+```bash
+cd backend
+.venv/bin/python scripts/convert_pdfs.py      # PDFs -> data/processed/*.jsonl + all_documents.jsonl
+.venv/bin/python scripts/create_tables.py     # Supabase tables (idempotent)
+.venv/bin/python scripts/ingest_jsonl.py      # chunks -> Postgres + Qdrant + BM25 (idempotent)
+.venv/bin/python scripts/try_retrieval.py "লে-অফ হলে শ্রমিক কি ক্ষতিপূরণ পায়?" --area labour
+.venv/bin/python scripts/test_llm_models.py openai/gpt-oss-20b --with-answer   # compare LLM_MODEL candidates
+```
+
+## API examples
+
+With the API running (`uvicorn app.main:app --port 8000`) and `LLM_MODEL` set in `.env`:
+
+```bash
+# answered, with citations (add "debug": true to get the retrieval trace)
+curl -s localhost:8000/api/v1/chat -H 'Content-Type: application/json' \
+  -d '{"message": "চাকরি থেকে ছাঁটাই করলে কী কী পাওনা পাব?"}'
+
+# off-topic -> the fixed refusal text, status "refused", no citations
+curl -s localhost:8000/api/v1/chat -H 'Content-Type: application/json' \
+  -d '{"message": "আজকে ঢাকার আবহাওয়া কেমন থাকবে?"}'
+
+curl -s localhost:8000/api/v1/sources                       # indexed documents
+curl -s localhost:8000/api/v1/sources/labour-act-2006-s6    # one chunk with full text and amendment notes
+```
+
+Response statuses: `answered`, `partial` (a number in the answer couldn't be matched to the source, so a warning is attached), `refused` (the fixed text with helpline 333), and `clarify` (the system asks a follow-up question). On a Groq rate limit, the API returns HTTP 503 `{"detail": {"code": "rate_limited", "message": "কিছুক্ষণ পর আবার চেষ্টা করুন।"}}`.
+
 ## Credits
 
 The hackathon rules require crediting every tool, library, model and data source.

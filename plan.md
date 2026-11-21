@@ -3,7 +3,7 @@
 Schedule: 21–23 Nov 2026 to build, 24 Nov morning to polish, then the final demo. MVP comes first. Phases 1–6 are the core and Phases 7–9 make it competitive.
 Rules are in `CLAUDE.md` and the spec is `docs/pipeline.md`.
 
-> **Status note (21 Nov):** the team supplied **PDFs** rather than the prepared JSONL: 21 bdlaws.minlaw.gov.bd section-print PDFs of the Labour Act in `data/Workers — Bangladesh Labour Act 2006/` (preamble plus §§ 1–20 and 3ক). Phase 2 therefore gained a PDF → section-JSONL step (`scripts/convert_pdfs.py`, pulled forward from Phase 7), and ingestion runs on that real data. The land, GD and allowance documents haven't arrived yet. In `.env`, Qdrant and Groq are configured but `DATABASE_URL` (Supabase) is still empty.
+> **Status note (21 Nov):** the team supplied **PDFs** rather than the prepared JSONL: 21 bdlaws.minlaw.gov.bd section-print PDFs of the Labour Act in `data/Workers — Bangladesh Labour Act 2006/` (preamble plus §§ 1–20 and 3ক). Phase 2 therefore gained a PDF → section-JSONL step (`scripts/convert_pdfs.py`, pulled forward from Phase 7), and ingestion runs on that real data. The land, GD and allowance documents haven't arrived yet. `.env` now has Supabase, Qdrant and Groq (all three connection checks OK). `LLM_MODEL` is still unset.
 
 ## Architecture
 
@@ -50,7 +50,9 @@ All routes live under `/api/v1`.
 | POST | `/feedback` | `{"query_log_id":str,"rating":"up\|down","comment":str?}` | `{"ok":true}` |
 | GET | `/eval/latest` | — | contents of `data/evaluation/results.json`, or 404 |
 
-`trace` (only when `debug=true`): `{"candidates":[{"chunk_id","citation","dense_rank","bm25_rank","dense_score","bm25_score","fused_score"}],"best_dense_score":float,"llm_calls":int}`.
+Each `/chat` response also carries `request_id` (pass it to `/feedback`). Citations also carry `marker` (the number shown as `[১]` in the answer) and `notes` (amendment footnotes). Errors: HTTP 503 `{"detail":{"code":"rate_limited|llm_not_configured|llm_unavailable|index_missing","message":"<Bangla>"}}`.
+
+`trace` (only when `debug=true`): `{"candidates":[{"chunk_id","citation","title","dense_rank","bm25_rank","dense_score","bm25_score","fused_score","exact_section"}],"best_dense_score":float,"llm_calls":int,"model":str,"gate":str}`.
 
 ## Postgres tables
 
@@ -103,7 +105,7 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [x] `ingest_jsonl.py`: idempotent, prints counts per area and timing, checks counts match across stores (`--skip-postgres` until Supabase is set)
 - [x] Tests: chunker, normalizer, tokenizer, text repair, deterministic IDs, BM25 round trip, parser regression on real PDFs
 - [x] Real run on the Labour Act PDFs: 22 sections → 55 chunks; two runs give identical counts (Qdrant 55 = BM25 55)
-- [ ] Postgres write (`create_tables.py`, then `ingest_jsonl.py` without `--skip-postgres`). **Blocked:** `DATABASE_URL` is empty.
+- [x] Postgres write: tables created, two full runs with matching counts `{'chunks': 55, 'qdrant': 55, 'bm25': 55, 'postgres': 55}`
 
 **Test:** `pytest tests/unit`, then `python scripts/ingest_jsonl.py` twice.
 **Done when:** two runs give identical counts, the Postgres, Qdrant and BM25 counts are equal, and the Bangla sample text reads correctly.
@@ -130,15 +132,19 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 **Goal:** the full grounded-answer pipeline with refusal, validation and cache.
 **Files:** `app/models/llm_client.py`, `app/prompts/{normalize.md,answer_bn.md}`, `app/services/{query_normalizer.py,trust_policy.py,generation_service.py,citation_validator.py,answer_cache.py,orchestrator.py}`, `app/schemas/{chat.py,llm.py,source.py,feedback.py}`, `app/api/routes/{chat.py,sources.py,feedback.py}`, `scripts/test_llm_models.py`, tests.
 
-- [ ] Groq wrapper: async, JSON mode, temperature 0.1, timeout, backoff on 429/5xx (max 3), token-usage logs
-- [ ] `test_llm_models.py`, a side-by-side comparison for choosing `LLM_MODEL`
-- [ ] Call 1 normalizer with a Pydantic schema
-- [ ] Trust gate: out of scope → refusal, clarify → question, low score and no BM25 hit in the top 3 → refusal
-- [ ] Call 2 generator (max ~120 words, numbered steps, exact numbers, `found`)
-- [ ] Validator: drops unknown IDs, refuses on empty or not found, and marks a numeric mismatch as `partial` with a warning
-- [ ] Orchestrator, `/chat`, answer cache, query logging, `/sources`, `/feedback`
-- [ ] Mocked tests: refusal paths, invalid ID dropped, numeric mismatch, clarify, cache hit
-- [ ] Choose `LLM_MODEL` with `test_llm_models.py` (needs the Groq key)
+- [x] Groq wrapper: async, JSON mode, temperature 0.1, timeout, backoff on 429/5xx (max 3), token-usage logs
+- [x] `test_llm_models.py`, a side-by-side comparison for choosing `LLM_MODEL`
+- [x] Call 1 normalizer with a Pydantic schema
+- [x] Trust gate: out of scope → refusal, clarify → question, low score and no BM25 hit in the top 3 → refusal
+- [x] Call 2 generator (max ~120 words, numbered steps, exact numbers, `found`)
+- [x] Validator: drops unknown IDs, refuses on empty or not found, and marks a numeric mismatch as `partial` with a warning
+- [x] Orchestrator, `/chat`, answer cache, query logging, `/sources`, `/feedback`
+- [x] Mocked tests: refusal paths, invalid ID dropped, numeric mismatch, clarify, cache hit
+- [x] Model comparison run (`test_llm_models.py ... --with-answer`) on gpt-oss-120b, gpt-oss-20b and qwen3.8-27b. **Recommended: `openai/gpt-oss-20b`** (correct dialect and Banglish normalization, faithful numbers, about 1.5 s for both calls). 120b flipped a dialect question's meaning; qwen changed a Banglish question's meaning and rewrote numbers.
+- [ ] Set `LLM_MODEL=openai/gpt-oss-20b` in `.env` (team decision)
+- [x] Verified end to end with curl: labour question answered with §11/§20 citations, the repeat served from cache in 0 ms, off-topic and land questions refused with the exact text.
+
+> Free-tier note: each answered question costs about 2.5k tokens, mostly Bangla source text. Groq TPM limits caused 10–20 s spikes in back-to-back tests, so warm the cache for demo questions (Phase 9).
 
 **Done when:** the README curl examples return a cited answer per area, and an off-topic question returns the exact refusal.
 
