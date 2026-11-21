@@ -113,13 +113,15 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 **Goal:** dense + BM25 + RRF, with traces kept for the UI.
 **Files:** `app/services/{retrieval_service.py,fusion_service.py}`, `scripts/{try_retrieval.py,eval_retrieval.py}`, `data/evaluation/retrieval_seed.jsonl`, tests.
 
-- [ ] Dense top 20 (query prefix, optional area filter) and BM25 top 20, each returning (chunk_id, score, rank)
-- [ ] RRF top 5 with dense rank, BM25 rank, cosine and fused score
-- [ ] A section-number query (`ধারা ১২৩` / `section 123`) is hit by BM25 (test)
-- [ ] `try_retrieval.py` CLI
-- [ ] Seed file template: 8 questions, expected IDs left empty for a human
-- [ ] `eval_retrieval.py`: Recall@5 and MRR for dense, BM25 and hybrid, saved as JSON
-- [ ] Fill in the expected IDs and run on real data (blocked: data)
+- [x] Dense top 20 (query prefix, optional area filter) and BM25 top 20, each returning (chunk_id, score, rank)
+- [x] RRF top 5 with dense rank, BM25 rank, cosine and fused score
+- [x] A section-number query (`ধারা ১২৩` / `section 123` / `৩ক ধারা`) is hit: exact matches go to the top of BM25 and form a third RRF list (tests, plus a real check that `ধারা ১৯` ranks first)
+- [x] `try_retrieval.py` CLI (`--area`, `--mode hybrid|dense|bm25`)
+- [x] Seed file template: 8 questions, expected IDs left empty for a human
+- [x] `eval_retrieval.py`: Recall@5 and MRR for dense, BM25 and hybrid, saved as JSON
+- [ ] Fill in `expected_chunk_ids` in `data/evaluation/retrieval_seed.jsonl` (human task; section IDs like `labour-act-2006-s4` work), then run the evaluation. Only the 2 labour rows can score until the other areas' documents arrive.
+
+> **Finding (21 Nov):** dense cosine barely separates on-topic (≈0.79–0.83) from off-topic (≈0.75–0.81) questions, and "BM25 hit in the top 3" is almost always true. The score gate alone will refuse little, so refusals rely on Call 1 `in_scope`, Call 2 `found=false` and validation. Tune `RETRIEVAL_MIN_SCORE` in Phase 8.
 
 **Done when:** try_retrieval works for one question per area and eval runs on the seed file.
 

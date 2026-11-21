@@ -1,0 +1,8 @@
+{"id": "seed-labour-1", "area": "labour", "question": "শিক্ষানবিশ শ্রমিকের শিক্ষানবিশীকাল কত দিন?", "expected_chunk_ids": []}
+{"id": "seed-labour-2", "area": "labour", "question": "লে-অফ হলে শ্রমিক কি ক্ষতিপূরণ পায়?", "expected_chunk_ids": []}
+{"id": "seed-land-1", "area": "land", "question": "জমির নামজারি করতে কী কী কাগজপত্র লাগে?", "expected_chunk_ids": []}
+{"id": "seed-land-2", "area": "land", "question": "ভূমি উন্নয়ন কর সময়মতো না দিলে কী হয়?", "expected_chunk_ids": []}
+{"id": "seed-gd-1", "area": "gd", "question": "থানায় জিডি করতে কী কী লাগে?", "expected_chunk_ids": []}
+{"id": "seed-gd-2", "area": "gd", "question": "মোবাইল হারালে কি অনলাইনে জিডি করা যায়?", "expected_chunk_ids": []}
+{"id": "seed-allowance-1", "area": "allowance", "question": "বয়স্ক ভাতা পাওয়ার যোগ্যতা কী?", "expected_chunk_ids": []}
+{"id": "seed-allowance-2", "area": "allowance", "question": "বিধবা ভাতার জন্য কোথায় আবেদন করতে হয়?", "expected_chunk_ids": []}

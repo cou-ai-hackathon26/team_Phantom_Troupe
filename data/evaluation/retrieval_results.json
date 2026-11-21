@@ -1,0 +1,27 @@
+{
+  "created_at": "2026-11-21T06:42:54+00:00",
+  "file": "retrieval_seed.jsonl",
+  "n_rows": 8,
+  "n_labelled": 0,
+  "area_filter": false,
+  "embedding_model": "intfloat/multilingual-e5-base",
+  "rrf_k": 60,
+  "metrics": {
+    "dense": {
+      "recall@5": 0.0,
+      "hit@5": 0.0,
+      "mrr": 0.0
+    },
+    "bm25": {
+      "recall@5": 0.0,
+      "hit@5": 0.0,
+      "mrr": 0.0
+    },
+    "hybrid": {
+      "recall@5": 0.0,
+      "hit@5": 0.0,
+      "mrr": 0.0
+    }
+  },
+  "details": []
+}
