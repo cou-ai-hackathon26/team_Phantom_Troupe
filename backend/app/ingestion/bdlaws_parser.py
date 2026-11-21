@@ -62,11 +62,19 @@ def _clean(text: str) -> str:
 
 def _strip_footnote_refs(text: str) -> str:
     """bdlaws body text uses Bangla digits only; stray ASCII digits are footnote markers."""
-    return re.sub(r"\s{2,}", " ", _ASCII_FOOTNOTE_REF.sub("", text)).strip()
+    text = _ASCII_FOOTNOTE_REF.sub("", text)
+    text = re.sub(r"(?<!\*)\*(?!\*)", "", text)  # lone "*" marker; keeps "[***]" (omitted text)
+    return re.sub(r"\s{2,}", " ", text).strip()
 
 
 def _is_margin(x0: float, x1: float) -> bool:
     return x0 < MARGIN_X0_MAX and x1 < MARGIN_X1_MAX
+
+
+def section_sort_key(number_bn: str) -> tuple[int, str]:
+    """ "প্রস্তাবনা" first, then numeric order: ২ < ৩ < ৩ক < ১০."""
+    m = re.match(r"(\d+)(.*)", bn_to_ascii_digits(number_bn))
+    return (-1, "") if m is None else (int(m.group(1)), m.group(2))
 
 
 def section_slug(number_bn: str) -> str:

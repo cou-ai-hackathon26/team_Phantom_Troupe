@@ -3,7 +3,7 @@
 Schedule: 21–23 Nov 2026 to build, 24 Nov morning to polish, then the final demo. MVP comes first. Phases 1–6 are the core and Phases 7–9 make it competitive.
 Rules are in `CLAUDE.md` and the spec is `docs/pipeline.md`.
 
-> **Status note (21 Nov):** the prepared JSONL dataset is not in the repo yet (the team may supply PDFs instead). Until it arrives, every phase is built and tested on synthetic fixtures, and the real runs happen once data lands. No `.env` exists yet, so connection checks report FAIL until the keys are added.
+> **Status note (21 Nov):** the team supplied **PDFs** rather than the prepared JSONL: 21 bdlaws.minlaw.gov.bd section-print PDFs of the Labour Act in `data/Workers — Bangladesh Labour Act 2006/` (preamble plus §§ 1–20 and 3ক). Phase 2 therefore gained a PDF → section-JSONL step (`scripts/convert_pdfs.py`, pulled forward from Phase 7), and ingestion runs on that real data. The land, GD and allowance documents haven't arrived yet. In `.env`, Qdrant and Groq are configured but `DATABASE_URL` (Supabase) is still empty.
 
 ## Architecture
 
@@ -92,16 +92,18 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 **Goal:** `all_documents.jsonl` loaded into Postgres, Qdrant and BM25, idempotently.
 **Files:** `app/db/{base.py,session.py,models.py}`, `app/ingestion/{text_normalizer.py,area_map.py,jsonl_loader.py,chunker.py,embedder.py,indexer.py}`, `app/repositories/{qdrant_repository.py,bm25_repository.py}`, `scripts/{create_tables.py,ingest_jsonl.py}`, tests.
 
-- [ ] SQLAlchemy models and the `create_tables` script
-- [ ] Explicit `source_file` → area dict, which fails loudly on an unknown file
-- [ ] Bangla normalizer (NFC, nukta forms, য়, whitespace, digit map) and BM25 tokenizer
-- [ ] Section-aware chunker (≤450 tokens kept whole; longer sections split on `।?\n` with ~60-token overlap, avoiding splits inside `(১)` sub-clauses; part numbers)
-- [ ] e5 embedder (passage prefix, GPU batch size, CPU fallback)
-- [ ] Qdrant collection, area payload index, deterministic UUID upserts in batches
-- [ ] BM25 pickle with chunk-ID order
-- [ ] `ingest_jsonl.py`: idempotent, prints counts per area and timing, and checks that counts match across stores
-- [ ] Tests: chunker, normalizer, tokenizer, deterministic IDs
-- [ ] **Real run on the team's data** (blocked: data not supplied yet)
+- [x] SQLAlchemy models and the `create_tables` script
+- [x] Explicit source registry (`area_map.py`: PDF folder / JSONL `source_file` → document and area), which fails loudly on unknown sources
+- [x] Bangla normalizer (NFC, nukta forms, য়, legacy danda `৷`, whitespace, digit map) and BM25 tokenizer
+- [x] **Added:** bdlaws PDF parser (`pdf_parser.py` rebuilds visual rows that PyMuPDF splits mid-word, and `bdlaws_parser.py` handles margin titles, chapter, footnotes → `notes`, source URL) plus `text_repair.py` (doubled vowel signs, Bijoy leftovers, stray in-word spaces), with rules from the real corpus
+- [x] Section-aware chunker (≤450 e5 tokens kept whole; longer sections packed from whole clauses, sentence split only for an overlong clause, ~60-token overlap, part numbers)
+- [x] e5 embedder (passage prefix, GPU batch size, CPU fallback)
+- [x] Qdrant collection, area payload index, deterministic UUIDv5 upserts in batches, stale-point cleanup
+- [x] BM25 pickle with chunk-ID order and chunk metadata (offline fallback for citations)
+- [x] `ingest_jsonl.py`: idempotent, prints counts per area and timing, checks counts match across stores (`--skip-postgres` until Supabase is set)
+- [x] Tests: chunker, normalizer, tokenizer, text repair, deterministic IDs, BM25 round trip, parser regression on real PDFs
+- [x] Real run on the Labour Act PDFs: 22 sections → 55 chunks; two runs give identical counts (Qdrant 55 = BM25 55)
+- [ ] Postgres write (`create_tables.py`, then `ingest_jsonl.py` without `--skip-postgres`). **Blocked:** `DATABASE_URL` is empty.
 
 **Test:** `pytest tests/unit`, then `python scripts/ingest_jsonl.py` twice.
 **Done when:** two runs give identical counts, the Postgres, Qdrant and BM25 counts are equal, and the Bangla sample text reads correctly.

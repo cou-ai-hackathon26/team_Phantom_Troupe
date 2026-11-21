@@ -32,6 +32,12 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(f"([{_CONS}])([\u09bf\u09c7\u09c8])\u09b8\u09cd\u09a8"), "\\1\u09cd\u09b2\\2"),
     # misplaced reph: consonant + র্ + vowel sign  ->  র্ + consonant + vowel sign (ভর্ু -> র্ভু)
     (re.compile(f"([{_CONS}])\u09b0{_HASANTA}([{_VOWEL_SIGNS}])"), "\u09b0\u09cd\\1\\2"),
+    # words split by a stray space on old bdlaws pages: "ক্ষে ত্রে", "উদ্দে শ্যে", "রেজিস্টা র", "রক্ষি ত".
+    # Both halves are non-words; the tail is only joined when the word ends there.
+    (
+        re.compile('(ক্ষে|দ্দে|স্টা|ক্ষি) (ত্রে|ত্র|শ্যে|শ্য|রে|র|ত)(?=[\\s,।;:)\\-"”’]|$)'),
+        r"\1\2",
+    ),
 )
 
 
