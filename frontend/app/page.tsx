@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowDown, MessageSquarePlus } from "lucide-react";
 import { AnswerCard } from "@/components/chat/answer-card";
 import { AnswerError, AnswerSkeleton, UserBubble } from "@/components/chat/answer-states";
 import { AreaCards } from "@/components/chat/area-cards";
@@ -37,6 +38,7 @@ export default function ChatPage() {
   const [announce, setAnnounce] = useState("");
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
   const busy = turns.some((t) => t.state === "loading");
   const [showMicHint, setShowMicHint] = useState(false);
   const [doc, setDoc] = useState<UserDocInfo | null>(null);
@@ -119,8 +121,25 @@ export default function ChatPage() {
 
   useEffect(() => {
     // follow the conversation, but never scroll the empty home screen away from its heading
-    if (turns.length > 0) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (turns.length > 0) scrollToEnd();
   }, [turns]);
+
+  useEffect(() => {
+    // "scroll to latest" button: shown when the end of the conversation is off screen
+    const el = endRef.current;
+    if (!el || turns.length === 0) return;
+    const io = new IntersectionObserver(([entry]) => setAwayFromEnd(!entry.isIntersecting), { rootMargin: "0px 0px -160px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [turns.length]);
+
+  const newChat = () => {
+    if (busy) return;
+    setTurns([]);
+    setInput("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    requestAnimationFrame(() => document.getElementById("question")?.focus());
+  };
 
   const openCitation = (c: Citation) => {
     if (c.kind === "user") {
@@ -149,12 +168,25 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100dvh-4.5rem)] flex-col">
+    <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">
         {turns.length === 0 ? (
           <AreaCards onAsk={ask} disabled={busy} />
         ) : (
           <div className="space-y-6">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {toBnDigits(turns.length)}টি প্রশ্ন · কথোপকথন কোথাও সংরক্ষণ হয় না
+              </p>
+              <button
+                type="button"
+                onClick={newChat}
+                disabled={busy}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-sm font-medium shadow-card transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-60"
+              >
+                <MessageSquarePlus className="size-4" aria-hidden /> নতুন প্রশ্ন
+              </button>
+            </div>
             {turns.map((turn) => (
               <div key={turn.id} className="space-y-3">
                 <UserBubble text={turn.question} attachment={turn.docName} />
@@ -167,24 +199,30 @@ export default function ChatPage() {
             ))}
           </div>
         )}
-        <div ref={endRef} />
+        <div ref={endRef} className="h-px" />
         <p className="sr-only" aria-live="polite">
           {announce}
         </p>
       </main>
 
       <div className="sticky bottom-0 z-20">
+        {awayFromEnd && turns.length > 0 && (
+          <button
+            type="button"
+            onClick={scrollToEnd}
+            aria-label="সর্বশেষ উত্তরে যান"
+            className="absolute -top-10 left-1/2 flex size-10 -translate-x-1/2 animate-fade-up items-center justify-center rounded-full border bg-card text-foreground shadow-card transition-colors hover:text-primary"
+          >
+            <ArrowDown className="size-5" aria-hidden />
+          </button>
+        )}
         <Composer
           value={input}
           onChange={setInput}
           onSubmit={() => ask(input)}
           busy={busy}
-          mic={
-            <div className="flex shrink-0 flex-col items-center gap-1">
-              <MicButton state={voice.state} onStart={startVoice} onStop={voice.stop} disabled={busy} />
-              <VoiceLangToggle lang={voice.lang} onChange={voice.setLang} disabled={voice.state !== "idle"} />
-            </div>
-          }
+          mic={<MicButton state={voice.state} onStart={startVoice} onStop={voice.stop} disabled={busy} />}
+          lang={<VoiceLangToggle lang={voice.lang} onChange={voice.setLang} disabled={voice.state !== "idle"} />}
           attach={<AttachButton onPick={(f) => void attachDoc(f)} busy={docUploading !== null} disabled={busy} />}
           top={
             <PersonalDocChip
@@ -214,6 +252,11 @@ export default function ChatPage() {
   );
 }
 
+/** The composer is the last thing on the page, so the page bottom keeps the newest answer just above it. */
+function scrollToEnd() {
+  window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+}
+
 interface VoiceStatusProps {
   state: ReturnType<typeof useSpeechInput>["state"];
   interim: string;
@@ -227,7 +270,7 @@ interface VoiceStatusProps {
 function VoiceStatus({ state, interim, error, elapsed, maxSeconds, showHint, onDismissError }: VoiceStatusProps) {
   if (state === "listening") {
     return (
-      <p className="mt-2 rounded-xl bg-primary-soft px-3 py-2 text-[0.98rem]" aria-live="polite">
+      <p className="mt-2 animate-fade-up rounded-2xl border border-primary/20 bg-primary-soft px-3 py-2 text-[0.98rem]" aria-live="polite">
         <span className="font-semibold text-primary">শুনছি… </span>
         {interim || <span className="text-muted-foreground">আপনার ভাষায় প্রশ্নটি বলুন, শেষ হলে থামুন।</span>}
       </p>
@@ -235,7 +278,7 @@ function VoiceStatus({ state, interim, error, elapsed, maxSeconds, showHint, onD
   }
   if (state === "recording") {
     return (
-      <p className="mt-2 rounded-xl bg-primary-soft px-3 py-2 text-[0.98rem]" aria-live="polite">
+      <p className="mt-2 animate-fade-up rounded-2xl border border-primary/20 bg-primary-soft px-3 py-2 text-[0.98rem]" aria-live="polite">
         <span className="font-semibold text-primary">রেকর্ড হচ্ছে… </span>
         {toBnDigits(elapsed)}/{toBnDigits(maxSeconds)} সেকেন্ড। বলা শেষ হলে লাল বোতামে চাপ দিন।
       </p>
@@ -259,7 +302,7 @@ function VoiceStatus({ state, interim, error, elapsed, maxSeconds, showHint, onD
     );
   }
   if (showHint) {
-    return <p className="mt-2 text-center text-sm text-primary">মাইকে চাপ দিয়ে আপনার ভাষায় প্রশ্ন বলুন</p>;
+    return <p className="mt-1.5 animate-fade-up text-center text-sm text-primary">মাইকে চাপ দিয়ে আপনার ভাষায় প্রশ্ন বলুন</p>;
   }
   return null;
 }

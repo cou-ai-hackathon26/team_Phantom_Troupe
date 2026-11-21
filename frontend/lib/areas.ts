@@ -6,7 +6,7 @@ export interface AreaInfo {
   label: string;
   description: string;
   icon: LucideIcon;
-  examples: [string, string];
+  examples: string[];
 }
 
 // Example chips are questions only (no facts). Keep them answerable from ingested documents.
@@ -42,9 +42,13 @@ export const AREAS: AreaInfo[] = [
   {
     id: "general",
     label: "অন্যান্য আইন",
-    description: "বাংলাদেশের অন্যান্য আইন, মানবাধিকার কমিশন",
+    description: "সংবিধান, বাংলাদেশের অন্যান্য আইন, মানবাধিকার কমিশন",
     icon: Scale,
-    examples: ["তথ্য অধিকার আইনে কীভাবে তথ্য চাইতে হয়?", "জাতীয় মানবাধিকার কমিশনে কীভাবে অভিযোগ করা যায়?"],
+    examples: [
+      "সংবিধানের অনুচ্ছেদ ২৭ কী বলে?",
+      "তথ্য অধিকার আইনে কীভাবে তথ্য চাইতে হয়?",
+      "জাতীয় মানবাধিকার কমিশনে কীভাবে অভিযোগ করা যায়?",
+    ],
   },
 ];
 

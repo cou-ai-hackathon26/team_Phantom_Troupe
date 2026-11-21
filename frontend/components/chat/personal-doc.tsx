@@ -28,7 +28,7 @@ export function AttachButton({ onPick, busy, disabled }: { onPick: (file: File) 
         disabled={disabled || busy}
         aria-label={busy ? "নথি পড়া হচ্ছে" : "নিজের নথি যুক্ত করুন (PDF বা ছবি)"}
         title="নিজের নথি যুক্ত করুন (PDF বা ছবি)"
-        className="flex size-10 shrink-0 items-center justify-center self-center rounded-full border sm:size-11 bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-60"
+        className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary-soft hover:text-primary disabled:opacity-60"
       >
         {busy ? <LoaderCircle className="size-5 animate-spin motion-reduce:animate-none" aria-hidden /> : <Paperclip className="size-5" aria-hidden />}
       </button>

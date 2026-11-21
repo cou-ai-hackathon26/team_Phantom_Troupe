@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, LoaderCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ComposerProps {
   value: string;
@@ -9,12 +10,14 @@ interface ComposerProps {
   onSubmit: () => void;
   busy: boolean;
   mic: ReactNode; // the voice button
+  lang?: ReactNode; // spoken-language toggle
   attach?: ReactNode; // personal-document button
   top?: ReactNode; // attached-document chip
   hint?: ReactNode;
 }
 
-export function Composer({ value, onChange, onSubmit, busy, mic, attach, top, hint }: ComposerProps) {
+/** Message box: full-width text area on top, tools and send button in a row below (works at phone width). */
+export function Composer({ value, onChange, onSubmit, busy, mic, lang, attach, top, hint }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   // grow with content up to ~5 lines
@@ -35,18 +38,16 @@ export function Composer({ value, onChange, onSubmit, busy, mic, attach, top, hi
   const canSend = value.trim().length >= 2 && !busy;
 
   return (
-    <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-      <div className="mx-auto max-w-3xl px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="bg-gradient-to-t from-background via-background/95 to-transparent pt-4">
+      <div className="mx-auto max-w-3xl px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] sm:px-4">
         {top}
         <form
-          className="flex items-end gap-2 sm:gap-3"
+          className="group rounded-3xl border bg-card p-2 shadow-card transition-shadow focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10"
           onSubmit={(e) => {
             e.preventDefault();
             if (canSend) onSubmit();
           }}
         >
-          {mic}
-          {attach}
           <label htmlFor="question" className="sr-only">
             আপনার প্রশ্ন
           </label>
@@ -57,21 +58,39 @@ export function Composer({ value, onChange, onSubmit, busy, mic, attach, top, hi
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="প্রশ্ন লিখুন…"
+            placeholder="আপনার প্রশ্ন লিখুন বা মাইকে বলুন…"
             maxLength={2000}
-            className="min-h-12 min-w-0 flex-1 resize-none rounded-2xl border bg-card px-3 py-3 sm:min-h-14 sm:px-4 sm:py-3.5 text-[1.05rem] leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
+            className="block max-h-40 min-h-11 w-full resize-none bg-transparent px-3 pt-2 pb-1 text-[1.05rem] leading-relaxed outline-none placeholder:text-muted-foreground"
           />
-          <button
-            type="submit"
-            disabled={!canSend}
-            aria-label="প্রশ্ন পাঠান"
-            className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary sm:size-14 text-primary-foreground transition-colors hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
-          >
-            <ArrowUp className="size-6" aria-hidden />
-          </button>
+          <div className="flex items-center gap-1.5 pt-1">
+            {attach}
+            {lang}
+            <span className="flex-1" />
+            {value.length > 1500 && (
+              <span className="text-xs text-muted-foreground tabular-nums">{2000 - value.length}</span>
+            )}
+            {mic}
+            <button
+              type="submit"
+              disabled={!canSend}
+              aria-label="প্রশ্ন পাঠান"
+              className={cn(
+                "flex size-11 shrink-0 items-center justify-center rounded-full transition-all",
+                canSend
+                  ? "bg-primary text-primary-foreground shadow-card hover:scale-105 hover:bg-primary/90 active:scale-95"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {busy ? (
+                <LoaderCircle className="size-5 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : (
+                <ArrowUp className="size-5" aria-hidden />
+              )}
+            </button>
+          </div>
         </form>
         {hint}
-        <p className="mt-2 text-center text-xs text-muted-foreground">
+        <p className="mt-1.5 text-center text-[0.72rem] text-muted-foreground sm:text-xs">
           এটি আইনি পরামর্শ নয়; তথ্য যাচাই করতে সংশ্লিষ্ট অফিসে যোগাযোগ করুন।
         </p>
       </div>

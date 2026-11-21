@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { FileSearch, MessageCircleQuestion, ShieldCheck, Sparkles } from "lucide-react";
+import { CorpusSummary } from "@/components/corpus-summary";
 import { EvalSection } from "@/components/eval-section";
 
 export const metadata: Metadata = { title: "কীভাবে কাজ করে — অধিকারAI" };
@@ -12,17 +13,18 @@ const STEPS = [
 ];
 
 const CREDITS = [
-  ["মডেল ও সেবা", "intfloat/multilingual-e5-base (লোকাল এমবেডিং) · Groq (LLM ও Whisper) · Supabase PostgreSQL · Qdrant Cloud · ব্রাউজারের Web Speech API"],
-  ["ব্যাকএন্ড", "FastAPI · Pydantic · SQLAlchemy · asyncpg · qdrant-client · sentence-transformers · PyTorch · rank-bm25 · PyMuPDF"],
+  ["মডেল ও সেবা", "intfloat/multilingual-e5-base (লোকাল এমবেডিং) · Groq (LLM ও Whisper) · Tavily (ওয়েব সার্চ, শুধু সরকারি সাইট) · Supabase PostgreSQL · Qdrant Cloud · ব্রাউজারের Web Speech API"],
+  ["ব্যাকএন্ড", "FastAPI · Pydantic · SQLAlchemy · asyncpg · qdrant-client · sentence-transformers · PyTorch · rank-bm25 · PyMuPDF · Tesseract OCR · EasyOCR"],
+  ["তথ্যের উৎস", "bdlaws.minlaw.gov.bd (আইন ও সংবিধান) · ভূমি মন্ত্রণালয় · সমাজসেবা অধিদফতর · বাংলাদেশ পুলিশ · জাতীয় মানবাধিকার কমিশন"],
   ["ফ্রন্টএন্ড", "Next.js · React · TypeScript · Tailwind CSS · shadcn/ui · Radix UI · lucide-react · Hind Siliguri ফন্ট"],
   ["এআই কোডিং সহকারী", "Claude Code (Anthropic)"],
 ];
 
 export default function AboutPage() {
   return (
-    <main className="mx-auto max-w-3xl space-y-10 px-4 py-8">
-      <section className="space-y-2">
-        <h1 className="text-2xl font-semibold">অধিকারAI কীভাবে কাজ করে</h1>
+    <main className="mx-auto max-w-4xl space-y-10 px-4 py-6 sm:py-10">
+      <section className="animate-fade-up space-y-2">
+        <h1 className="text-2xl font-bold sm:text-3xl">অধিকারAI কীভাবে কাজ করে</h1>
         <p className="text-muted-foreground">
           অধিকারAI শুধু সরকারি আইন ও নথি থেকে উত্তর দেয় এবং প্রতিটি উত্তরের সাথে সূত্র দেখায়। নথিতে উত্তর না থাকলে অনুমান
           না করে জাতীয় হেল্পলাইন ৩৩৩-এর কথা বলে।
@@ -31,11 +33,11 @@ export default function AboutPage() {
 
       <section aria-labelledby="steps-heading" className="space-y-4">
         <h2 id="steps-heading" className="text-xl font-semibold">চার ধাপে উত্তর</h2>
-        <ol className="grid gap-3 sm:grid-cols-4">
+        <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((step, i) => {
             const Icon = step.icon;
             return (
-              <li key={step.title} className="relative rounded-xl border bg-card p-4">
+              <li key={step.title} className="relative rounded-2xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-card">
                 <span className="flex size-10 items-center justify-center rounded-lg bg-primary-soft text-primary">
                   <Icon className="size-5" aria-hidden />
                 </span>
@@ -51,21 +53,12 @@ export default function AboutPage() {
 
       <section aria-labelledby="data-heading" className="space-y-3">
         <h2 id="data-heading" className="text-xl font-semibold">তথ্যের উৎস</h2>
-        <ul className="space-y-2">
-          <li className="rounded-xl border bg-card p-4">
-            <p className="font-semibold">বাংলাদেশ শ্রম আইন, ২০০৬</p>
-            <p className="text-[0.95rem] text-muted-foreground">
-              আইন ও বিচার বিভাগের ওয়েবসাইট (
-              <a href="https://bdlaws.minlaw.gov.bd/act-952.html" target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-4 hover:underline">
-                bdlaws.minlaw.gov.bd
-              </a>
-              ) থেকে নেওয়া প্রস্তাবনা এবং ধারা ১ থেকে ২০, সংশোধনী টীকাসহ।
-            </p>
-          </li>
-          <li className="rounded-xl border border-dashed p-4 text-[0.95rem] text-muted-foreground">
-            জমি, জিডি ও সামাজিক ভাতার নথি যুক্ত হচ্ছে। যে বিষয়ের নথি নেই, সে বিষয়ে অধিকারAI উত্তর না দিয়ে জানিয়ে দেয়।
-          </li>
-        </ul>
+        <p className="text-muted-foreground">
+          আইন ও বিচার বিভাগের ওয়েবসাইট (bdlaws.minlaw.gov.bd), ভূমি মন্ত্রণালয়, সমাজসেবা অধিদফতর, বাংলাদেশ পুলিশ ও জাতীয়
+          মানবাধিকার কমিশনের প্রকাশিত আইন, বিধিমালা, নীতিমালা ও নির্দেশিকা। স্থানীয় নথিতে উত্তর না পেলে নির্দিষ্ট সরকারি ওয়েবসাইটে
+          খোঁজা হয়, এবং সেই উত্তরে আলাদা চিহ্ন ও যাচাইয়ের সতর্কতা থাকে।
+        </p>
+        <CorpusSummary />
       </section>
 
       <EvalSection />
@@ -74,7 +67,7 @@ export default function AboutPage() {
         <h2 id="limits-heading" className="text-xl font-semibold">সীমাবদ্ধতা</h2>
         <ul className="list-disc space-y-1.5 pl-5 text-[0.98rem]">
           <li>এটি আইনি পরামর্শ নয়। গুরুত্বপূর্ণ সিদ্ধান্তের আগে সংশ্লিষ্ট অফিস বা আইনজীবীর সাথে কথা বলুন।</li>
-          <li>উত্তর শুধু যুক্ত করা নথি থেকে আসে; নথির বাইরের নিয়ম বা সাম্প্রতিক পরিবর্তন এতে নাও থাকতে পারে।</li>
+          <li>উত্তর যুক্ত করা নথি (এবং প্রয়োজনে নির্দিষ্ট সরকারি ওয়েবসাইট) থেকে আসে; সাম্প্রতিক পরিবর্তন এতে নাও থাকতে পারে।</li>
           <li>পুরনো সরকারি নথিতে লেখার কিছু ত্রুটি থাকতে পারে। সন্দেহ হলে মূল উৎস খুলে দেখুন।</li>
           <li>আপনার প্রশ্ন বা কথোপকথন সংরক্ষণ করা হয় না; ব্যক্তিগত তথ্য (এনআইডি, ফোন নম্বর) দেবেন না।</li>
         </ul>
@@ -84,7 +77,7 @@ export default function AboutPage() {
         <h2 id="credits-heading" className="text-xl font-semibold">কৃতজ্ঞতা</h2>
         <dl className="space-y-2">
           {CREDITS.map(([k, v]) => (
-            <div key={k} className="rounded-xl border bg-card p-4">
+            <div key={k} className="rounded-2xl border bg-card p-4">
               <dt className="font-semibold">{k}</dt>
               <dd className="text-[0.95rem] text-muted-foreground">{v}</dd>
             </div>
