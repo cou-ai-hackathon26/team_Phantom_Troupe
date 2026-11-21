@@ -46,6 +46,9 @@ Do this:
    - Many older laws are in English. When the question is about an institution, office or programme, add its
      English name once in parentheses, e.g. "বিশ্ববিদ্যালয় মঞ্জুরী কমিশন (University Grants Commission)",
      "রাজধানী উন্নয়ন কর্তৃপক্ষ (RAJUK)", "পুলিশ (Police)".
+   - A complaint that an institution or office is not acting ("কর্তৃপক্ষ ব্যবস্থা নিচ্ছে না") becomes a search for who
+     inspects, supervises or hears complaints about it, plus the problem itself, e.g.
+     "বিশ্ববিদ্যালয় ভবনে ফাটল; বিশ্ববিদ্যালয় পরিদর্শন, তদারকি ও মঞ্জুরী কমিশন (University Grants Commission)".
    - Do not add facts, numbers, laws or section numbers that the user did not say.
 
 Reply with JSON only, exactly these keys:

@@ -48,6 +48,7 @@ def section_refs(query: str) -> list[str]:
 # where a bare "ধারা N" goes when several acts in the area have that section and none is named or hit
 PRIMARY_DOCUMENTS: dict[str, str] = {"labour": "labour-act-2006"}
 MAX_EXACT_DOCS = 2
+REPEALED_MARK = "[রহিত]"  # added to repealed act titles at ingestion (sqlite_laws.document_spec)
 _TITLE_STOPWORDS = frozenset(
     {
         "আইন", "অধ্যাদেশ", "আদেশ", "বিধিমালা", "প্রবিধানমালা", "নীতিমালা", "বাংলাদেশ", "সনের", "নং", "এর", "ধারা",
@@ -196,7 +197,14 @@ class Retriever:
 def diversify(candidates: list[FusedCandidate], chunks: dict[str, ChunkRecord], top_n: int) -> list[FusedCandidate]:
     """Keep at most one chunk per section title across different documents: ~70 university acts share
     sections like "সংবিধি প্রণয়ন", and five near-identical copies would otherwise fill the top 5.
-    Parts of the same section (same document) and exact section matches are never dropped."""
+    Parts of the same section (same document) and exact section matches are never dropped.
+    Chunks of repealed acts ("[রহিত]" in the title) rank after current law, which usually carries the same text."""
+
+    def repealed(cand: FusedCandidate) -> bool:
+        chunk = chunks.get(cand.chunk_id)
+        return bool(chunk and REPEALED_MARK in chunk.act and not cand.exact_section)
+
+    candidates = [c for c in candidates if not repealed(c)] + [c for c in candidates if repealed(c)]
     picked: list[FusedCandidate] = []
     seen: dict[str, str] = {}  # title -> document_id of the first chunk with it
     for cand in candidates:

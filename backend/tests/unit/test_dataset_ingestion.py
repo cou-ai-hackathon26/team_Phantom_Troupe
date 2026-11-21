@@ -395,3 +395,13 @@ def test_diversify_drops_same_titled_sections_of_other_acts() -> None:
     assert [c.chunk_id for c in diversify(cands, chunks, 5)] == ["a1", "a2", "c1"]  # b1: same title, other act
     exact = [FusedCandidate("a1", 0.0), FusedCandidate("b1", 0.0, exact_section=True)]
     assert [c.chunk_id for c in diversify(exact, chunks, 5)] == ["a1", "b1"]  # exact matches are kept
+
+
+def test_diversify_ranks_repealed_acts_after_current_law() -> None:
+    from app.services.fusion_service import FusedCandidate
+    from app.services.retrieval_service import diversify
+
+    old = _chunk("old-act", "নমুনা অধ্যাদেশ [রহিত]", "১").model_copy(update={"id": "old", "title": "দায়িত্ব"})
+    new = _chunk("new-act", "নমুনা আইন", "১").model_copy(update={"id": "new", "title": "দায়িত্ব"})
+    cands = [FusedCandidate("old", 0.0), FusedCandidate("new", 0.0)]
+    assert [c.chunk_id for c in diversify(cands, {"old": old, "new": new}, 5)] == ["new"]  # same title: copy dropped
