@@ -153,16 +153,18 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 **Goal:** a calm, trustworthy Bangla UI wired to `/chat`.
 **Files:** `frontend/app/{page.tsx,sources/page.tsx,about/page.tsx,layout.tsx,globals.css}`, `frontend/components/*`, `frontend/lib/{api.ts,types.ts,areas.ts,bn.ts}`.
 
-- [ ] Design tokens (deep green accent, warm gray, status colors), Hind Siliguri at 17–18px with 1.7 line height
-- [ ] Header, empty state with four area cards and example chips, fixed composer with mic button
-- [ ] Answer card: status badge, numbered steps, `[১]` markers, সূত্র list, copy and feedback buttons
-- [ ] Citation side sheet (bottom sheet on mobile) with an "মূল উৎস দেখুন" link
-- [ ] Refusal card with a `tel:333` button, plus the "কীভাবে পাওয়া গেল" trace panel
-- [ ] Skeleton loading state, Bangla errors with retry, disclaimer
-- [ ] `/sources` and `/about` pages
-- [ ] Accessibility: aria-live, focus rings, reduced motion
+- [x] Design tokens (deep green accent, warm gray, status colors), Hind Siliguri at 17–18px with 1.7 line height
+- [x] Header, empty state with four area cards and example chips, fixed composer with mic button
+- [x] Answer card: status badge, numbered steps, `[১]` markers, সূত্র list, copy and feedback buttons
+- [x] Citation side sheet (bottom sheet on mobile) with an "মূল উৎস দেখুন" link
+- [x] Refusal card with a `tel:333` button, plus the "কীভাবে পাওয়া গেল" trace panel
+- [x] Skeleton loading state, Bangla errors with retry, disclaimer
+- [x] `/sources` and `/about` pages
+- [x] Accessibility: aria-live, focus rings, reduced motion
 
 **Done when:** one question per area works from the UI, and the layout is right at 360px and 1440px.
+
+> Verified 21 Nov with headless Chromium (Playwright) against the live API: home, answer, trace, citation sheet (side on desktop, bottom on mobile), refusal card with `tel:333`, `/sources` and `/about` at 360 and 1440 px. No horizontal overflow and no console errors. Only labour can be demonstrated so far; the other three areas correctly refuse until their documents are ingested.
 
 ## Phase 6 — Voice input (~2 h)
 

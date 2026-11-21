@@ -25,7 +25,7 @@ PDF_FOLDERS: dict[str, DocumentSpec] = {
         document_id="labour-act-2006",
         area="labour",
         title="বাংলাদেশ শ্রম আইন, ২০০৬",
-        issuer="Legislative and Parliamentary Affairs Division, Ministry of Law (bdlaws.minlaw.gov.bd)",
+        issuer="লেজিসলেটিভ ও সংসদ বিষয়ক বিভাগ, আইন, বিচার ও সংসদ বিষয়ক মন্ত্রণালয়",
         parser="bdlaws",
         source_url="https://bdlaws.minlaw.gov.bd/act-952.html",
     ),

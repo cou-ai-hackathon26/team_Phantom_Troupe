@@ -27,6 +27,7 @@ class TraceCandidate(BaseModel):
     chunk_id: str
     citation: str
     title: str
+    part: int | None = None
     dense_rank: int | None
     dense_score: float | None
     bm25_rank: int | None

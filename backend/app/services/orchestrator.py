@@ -109,6 +109,7 @@ class Orchestrator:
                         chunk_id=c.chunk_id,
                         citation=chunk.citation if chunk else c.chunk_id,
                         title=chunk.title if chunk else "",
+                        part=chunk.part if chunk else None,
                         dense_rank=c.dense_rank,
                         dense_score=c.dense_score,
                         bm25_rank=c.bm25_rank,
