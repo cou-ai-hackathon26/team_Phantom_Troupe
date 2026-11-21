@@ -356,3 +356,13 @@ def test_store_lock_is_reentrant_across_calls(tmp_path: Path) -> None:
         pass
     with dataset_indexer.store_lock(tmp_path / "l"):
         pass
+
+
+def test_unreadable_text_layer_flags_bijoy_and_symbol_fonts() -> None:
+    from app.ingestion.generic_parser import unreadable_text_layer
+
+    assert unreadable_text_layer("14388 evsjv‡`k †M‡RU, AwZwi³, GwcÖj 7, 2026 " * 3)
+    assert unreadable_text_layer("dfbq6 VM vtq:Fom q.q8.qaqqqqrg# qxtq f+,in RvPI: Tq$1 cqqr; RRqR qoq8 qet " * 2)
+    assert not unreadable_text_layer("নমুনা বাক্য যেখানে অনেকগুলো সাধারণ বাংলা শব্দ আছে এবং আরও কিছু শব্দ রয়েছে")
+    assert not unreadable_text_layer("The Sample Act applies to every sample holding described in this order")
+    assert not unreadable_text_layer("১২৩ ৪৫৬ ৭৮৯")  # too few letters to judge

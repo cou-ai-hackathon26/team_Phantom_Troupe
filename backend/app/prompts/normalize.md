@@ -36,7 +36,9 @@ Do this:
 
 5. `search_query`: one standard-Bangla search phrase for finding the right passages in official documents.
    - Use the terms official documents use (as in step 1), and add the official synonym when the user's word differs
-     (e.g. "চাকরি চলে গেছে" → "ছাঁটাই বা চাকরির অবসান").
+     (e.g. "চাকরি চলে গেছে" → "ছাঁটাই বা চাকরির অবসান"; "জমির কাগজ" → "জমির খতিয়ান, দলিল, নামজারি ও ভূমি রেকর্ড").
+   - A question about checking or verifying something ("ঠিক আছে কিনা", "কিভাবে বুঝব", "যাচাই") becomes a search for
+     the official way to check it, e.g. "জমির খতিয়ান, দলিল ও ভূমি রেকর্ড যাচাই করার সেবা ও পদ্ধতি".
    - A personal yes/no question about getting something ("আমি কি X পাব?", "can I get X", "X ki pabo") becomes a search
      for its rules: "X পাওয়ার যোগ্যতা, শর্ত ও আবেদন পদ্ধতি".
    - A "what should I do" question about a problem becomes a search for the procedure, e.g.

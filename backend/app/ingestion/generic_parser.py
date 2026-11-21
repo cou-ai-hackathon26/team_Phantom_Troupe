@@ -81,8 +81,25 @@ class ParsedPdf:
         return any(r.needs_review for r in self.reports)
 
 
+MIN_LETTERS_FOR_QUALITY = 40
+# SutonnyMJ/Bijoy glyph codes that essentially never occur in Unicode Bangla or English text
+_BIJOY_GLYPHS = re.compile(r"[‡†ˆ]|evsjv|AwZwi|Ges\b|Kiv\b")
+MIN_BIJOY_GLYPHS = 3
+
+
+def unreadable_text_layer(text: str) -> bool:
+    """True when a page's embedded text does not read as words: unconverted Bijoy ("evsjv‡`k") or a
+    custom-font mapping that extracts as symbols. Only OCR of the rendered page can recover such pages."""
+    if len(_BIJOY_GLYPHS.findall(text)) >= MIN_BIJOY_GLYPHS:
+        return True
+    if sum(ch.isalpha() for ch in text) < MIN_LETTERS_FOR_QUALITY:
+        return False
+    return ocr_quality(text) < MIN_OCR_QUALITY
+
+
 def parse_generic_pdf(path: str | Path, ocr: PageOcrRunner | None = None, drop_garbage: bool = False) -> ParsedPdf:
-    """drop_garbage: discard OCR pages whose ocr_quality() is below MIN_OCR_QUALITY (bulk ingestion)."""
+    """drop_garbage (bulk ingestion): OCR text-layer pages that are unreadable (unreadable_text_layer) and
+    discard OCR pages whose ocr_quality() is below MIN_OCR_QUALITY."""
     out = ParsedPdf()
     with pymupdf.open(path) as doc:
         for page in doc:
@@ -91,10 +108,13 @@ def parse_generic_pdf(path: str | Path, ocr: PageOcrRunner | None = None, drop_g
             kind = classify_page(raw, has_images=bool(page.get_images()))
             report = PageReport(pno, kind, "pymupdf")
             text = raw
+            if kind == "text" and drop_garbage and ocr is not None and unreadable_text_layer(raw):
+                report.needs_review = True
+                kind = "scanned"  # the text layer is gibberish: OCR the rendered page instead
             if kind == "legacy":
                 conv = convert_bijoy(raw)
                 text, report.method = conv.text, "bijoy"
-                if not conv.trustworthy:
+                if not conv.trustworthy or (drop_garbage and ocr is not None and unreadable_text_layer(conv.text)):
                     report.needs_review = True
                     kind = "scanned"  # fall through to OCR when available
             if kind == "scanned":
@@ -123,6 +143,36 @@ def parse_generic_pdf(path: str | Path, ocr: PageOcrRunner | None = None, drop_g
             if text:
                 out.pages.append((pno, text))
     return out
+
+
+def reocr_unreadable_pages(path: str | Path, parsed: ParsedPdf, ocr: PageOcrRunner) -> int:
+    """Re-OCR the text-layer pages of an already parsed PDF whose text is unreadable (cached parses made
+    before unreadable_text_layer existed). Updates `parsed` in place; returns the number of pages redone."""
+    texts = dict(parsed.pages)
+    redo = [
+        r
+        for r in parsed.reports
+        if r.method in ("pymupdf", "bijoy") and unreadable_text_layer(texts.get(r.page_number, ""))
+    ]
+    if not redo:
+        return 0
+    with pymupdf.open(path) as doc:
+        for report in redo:
+            try:
+                res = ocr.ocr_page(doc[report.page_number - 1])
+            except OcrUnavailable:
+                continue
+            text = normalize_text(repair_bangla(res.result.text))
+            report.method, report.confidence, report.needs_review = res.result.engine, res.result.confidence, True
+            if text and ocr_quality(text) < MIN_OCR_QUALITY:
+                report.method, text = f"{report.method}+dropped", ""
+            report.chars = len(text)
+            if text:
+                texts[report.page_number] = text
+            else:
+                texts.pop(report.page_number, None)
+    parsed.pages = sorted(texts.items())
+    return len(redo)
 
 
 def _page_title(text: str) -> str:

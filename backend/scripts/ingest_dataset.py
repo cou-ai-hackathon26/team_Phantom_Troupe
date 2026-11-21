@@ -75,11 +75,17 @@ def _parse_generic_cached(src: SourceFile, ocr: generic_parser.PageOcrRunner) ->
     cache = OCR_CACHE / f"{src.sha256}.json"
     if cache.exists():
         raw = json.loads(cache.read_text(encoding="utf-8"))
-        return generic_parser.ParsedPdf(
+        parsed = generic_parser.ParsedPdf(
             pages=[(p, t) for p, t in raw["pages"]],
             reports=[generic_parser.PageReport(**r) for r in raw["reports"]],
         )
-    parsed = generic_parser.parse_generic_pdf(src.path, ocr, drop_garbage=True)
+        # parses cached before the unreadable-text-layer check: OCR just those pages, then re-cache
+        redone = generic_parser.reocr_unreadable_pages(src.path, parsed, ocr)
+        if not redone:
+            return parsed
+        print(f"            re-OCR'd {redone} unreadable text-layer pages")
+    else:
+        parsed = generic_parser.parse_generic_pdf(src.path, ocr, drop_garbage=True)
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(
         json.dumps({"file": str(src.rel), "pages": parsed.pages, "reports": [asdict(r) for r in parsed.reports]},
