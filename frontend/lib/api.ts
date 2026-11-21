@@ -75,8 +75,16 @@ export interface ListParams {
   pageSize?: number;
 }
 
+const OUTDATED_API = "সার্ভারের পুরনো সংস্করণ চলছে। ব্যাকএন্ড রিস্টার্ট করুন, তারপর পাতাটি রিফ্রেশ করুন।";
+
+/** A paginated reply must carry `items`; an older backend returns a bare list instead. */
+function assertPaged<T extends { items: unknown }>(res: T): T {
+  if (!res || !Array.isArray(res.items)) throw new ApiError(OUTDATED_API, 0, "outdated_api");
+  return res;
+}
+
 export const listSources = ({ q, area, page = 1, pageSize = 20 }: ListParams = {}, init?: RequestInit) =>
-  request<DocumentPage>(`/sources${query({ q, area, page, page_size: pageSize })}`, init);
+  request<DocumentPage>(`/sources${query({ q, area, page, page_size: pageSize })}`, init).then(assertPaged);
 
 export const getDocument = (documentId: string) =>
   request<DocumentDetail>(`/sources/documents/${encodeURIComponent(documentId)}`);
@@ -133,11 +141,14 @@ export const adminDocuments = (
   request<AdminDocumentPage>(`/admin/documents${query({ q, area, kind, page, page_size: pageSize })}`, {
     ...init,
     headers: auth(token),
-  });
+  }).then(assertPaged);
 
 export const adminDocument = (token: string, id: string, { q, page = 1, pageSize = 20 }: ListParams = {}) =>
   request<AdminDocumentDetail>(`/admin/documents/${encodeURIComponent(id)}${query({ q, page, page_size: pageSize })}`, {
     headers: auth(token),
+  }).then((res) => {
+    if (typeof res?.pages !== "number") throw new ApiError(OUTDATED_API, 0, "outdated_api");
+    return res;
   });
 
 export function adminUpload(token: string, file: File, meta: Record<string, string>) {
