@@ -26,6 +26,7 @@ async def record_query(
     message: str,
     normalized_question: str,
     area: str | None,
+    private: bool = False,
     status: str,
     retrieved_chunk_ids: list[str],
     best_dense_score: float | None,
@@ -36,6 +37,9 @@ async def record_query(
     gate: str,
 ) -> str:
     request_id = str(uuid.uuid4())
+    if private:  # question about a personal document: keep no text at all
+        message, normalized_question = "", None  # type: ignore[assignment]
+        retrieved_chunk_ids = [c for c in retrieved_chunk_ids if not c.startswith("user:")]
     log_event(
         logger,
         "query",
@@ -59,7 +63,7 @@ async def record_query(
             session.add(
                 QueryLog(
                     id=uuid.UUID(request_id),
-                    message=safe_message(message),
+                    message=safe_message(message) if message else None,
                     normalized_question=normalized_question,
                     area=area,
                     status=status,

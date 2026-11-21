@@ -54,7 +54,17 @@ class Settings(BaseSettings):
 
     health_check_timeout_s: float = 5.0
 
-    @field_validator("database_url", "qdrant_url", "qdrant_api_key", "groq_api_key", "llm_model", mode="before")
+    # Admin panel (knowledge management). Unset = admin endpoints disabled.
+    admin_token: SecretStr | None = None
+    max_upload_mb: int = 25
+
+    # Personal documents uploaded by users: kept in memory only, never embedded or stored.
+    user_doc_ttl_minutes: int = 60
+    user_doc_max_count: int = 200
+
+    @field_validator(
+        "database_url", "qdrant_url", "qdrant_api_key", "groq_api_key", "llm_model", "admin_token", mode="before"
+    )
     @classmethod
     def _blank_is_unset(cls, value: object) -> object:
         """Treat empty .env entries (e.g. `GROQ_API_KEY=`) as not configured."""

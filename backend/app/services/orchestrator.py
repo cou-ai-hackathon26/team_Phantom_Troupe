@@ -1,6 +1,9 @@
 """The /chat pipeline. At most 2 LLM calls per question.
 
 cache(raw) → Call 1 normalize → gate → cache(normalized) → retrieve → gate → Call 2 → validate → log
+
+With a personal document (request.user_doc_id) the question is "private": no cache read/write, no
+refusal before Call 2 (the answer may be in the user's document), and nothing about it is logged.
 """
 
 import time
@@ -11,11 +14,14 @@ from app.models.llm_client import LLMBadOutput, LLMClient
 from app.schemas.chat import ChatRequest, ChatResponse, Trace, TraceCandidate
 from app.services.answer_cache import AnswerCache, cache_key
 from app.services.citation_validator import validate_answer
-from app.services.generation_service import generate_answer, label_chunks
+from app.services.generation_service import generate_answer, label_chunks, label_user_passages
 from app.services.query_log import record_query
 from app.services.query_normalizer import normalize_query
 from app.services.retrieval_service import RetrievalResult, Retriever
 from app.services.trust_policy import pre_retrieval_gate, retrieval_gate
+from app.services.user_docs import UserDocStore, get_user_doc_store
+
+OFFICIAL_CHUNKS_WITH_USER_DOC = 3  # keep the prompt within free-tier token limits
 
 
 @dataclass
@@ -27,18 +33,24 @@ class _Run:
     normalized: str = ""
     area: str | None = None
     warnings: list[str] = field(default_factory=list)
+    private: bool = False
 
 
 class Orchestrator:
-    def __init__(self, retriever: Retriever, llm: LLMClient, cache: AnswerCache) -> None:
+    def __init__(
+        self, retriever: Retriever, llm: LLMClient, cache: AnswerCache, user_docs: UserDocStore | None = None
+    ) -> None:
         self.retriever = retriever
         self.llm = llm
         self.cache = cache
+        self.user_docs = user_docs or get_user_doc_store()
 
     async def run(self, request: ChatRequest) -> ChatResponse:
         run = _Run(started=time.perf_counter())
-        raw_key = cache_key(request.message, request.area, self.llm.model, "raw")
-        if (hit := await self.cache.get(raw_key)) is not None:
+        user_doc = self.user_docs.get(request.user_doc_id) if request.user_doc_id else None  # UserDocExpired → 404
+        run.private = user_doc is not None
+        raw_key = None if run.private else cache_key(request.message, request.area, self.llm.model, "raw")
+        if raw_key and (hit := await self.cache.get(raw_key)) is not None:
             return await self._from_cache(hit, request, run)
 
         # ---- Call 1: normalize + classify (LLM errors other than bad output propagate → HTTP 503)
@@ -48,14 +60,15 @@ class Orchestrator:
         run.area = request.area or query.area
 
         gate = pre_retrieval_gate(query)
-        if gate.decision == "refuse":
+        if gate.decision == "refuse" and not run.private:
             return await self._finish(request, run, gate.reason, "refused", REFUSAL_TEXT, raw_key=raw_key)
-        if gate.decision == "clarify":
+        if gate.decision == "clarify" and not run.private:
             return await self._finish(request, run, gate.reason, "clarify", query.clarification_question or "")
 
-        norm_key = cache_key(run.normalized, run.area, self.llm.model, "normalized")
-        if (hit := await self.cache.get(norm_key)) is not None:
-            await self.cache.set(raw_key, hit)
+        norm_key = None if run.private else cache_key(run.normalized, run.area, self.llm.model, "normalized")
+        if norm_key and (hit := await self.cache.get(norm_key)) is not None:
+            if raw_key:
+                await self.cache.set(raw_key, hit)
             return await self._from_cache(hit, request, run)
 
         # ---- retrieval + score gate
@@ -64,13 +77,20 @@ class Orchestrator:
             # classified area has no documents (or a wrong guess): search every area instead
             run.retrieval = await self.retriever.retrieve(run.normalized, area=None)
         gate = retrieval_gate(run.retrieval)
-        if gate.decision == "refuse":
+        if gate.decision == "refuse" and not run.private:
             return await self._finish(
                 request, run, gate.reason, "refused", REFUSAL_TEXT, raw_key=raw_key, norm_key=norm_key
             )
 
         # ---- Call 2: grounded answer, then validation in code
-        labelled = label_chunks(run.retrieval.top_chunks())
+        official = run.retrieval.top_chunks()
+        if user_doc is not None:
+            # official passages only if the score gate passed; the user's passages always go in
+            official = official[:OFFICIAL_CHUNKS_WITH_USER_DOC] if gate.decision == "continue" else []
+            labelled: dict = label_chunks(official)
+            labelled.update(label_user_passages(user_doc.id, user_doc.filename, user_doc.select(run.normalized)))
+        else:
+            labelled = label_chunks(official)
         try:
             result = await generate_answer(self.llm, run.normalized, labelled)
         except LLMBadOutput:
@@ -164,6 +184,7 @@ class Orchestrator:
         response.request_id = await record_query(
             message=request.message,
             normalized_question=response.normalized_question,
+            private=run.private,
             area=run.area,
             status=status,
             retrieved_chunk_ids=[c.chunk_id for c in trace.candidates],

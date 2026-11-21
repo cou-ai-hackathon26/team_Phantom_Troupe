@@ -68,6 +68,10 @@ class Retriever:
     def chunks(self) -> dict[str, ChunkRecord]:
         return self.bm25.chunks
 
+    def replace_index(self, bm25: BM25Index) -> None:
+        """Swap in a rebuilt BM25 index (after an admin upload/delete) without restarting the API."""
+        self.bm25 = bm25
+
     async def dense(self, query: str, area: str | None, top_k: int) -> list[DenseHit]:
         vector = await asyncio.to_thread(self.embedder.embed_query, query)
         return await self.qdrant.search(vector, top_k=top_k, area=area)

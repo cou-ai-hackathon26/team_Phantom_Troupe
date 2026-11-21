@@ -57,6 +57,7 @@ class QdrantRepository:
                 vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
             )
         await self.client.create_payload_index(self.collection, "area", models.PayloadSchemaType.KEYWORD)
+        await self.client.create_payload_index(self.collection, "document_id", models.PayloadSchemaType.KEYWORD)
 
     async def recreate(self, dim: int) -> None:
         if await self.client.collection_exists(self.collection):
@@ -84,6 +85,17 @@ class QdrantRepository:
         if stale:
             await self.client.delete(self.collection, points_selector=models.PointIdsList(points=stale))
         return len(stale)
+
+    async def delete_document(self, document_id: str) -> None:
+        await self.client.delete(
+            self.collection,
+            points_selector=models.FilterSelector(
+                filter=models.Filter(
+                    must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))]
+                )
+            ),
+            wait=True,
+        )
 
     async def count(self) -> int:
         return (await self.client.count(self.collection, exact=True)).count

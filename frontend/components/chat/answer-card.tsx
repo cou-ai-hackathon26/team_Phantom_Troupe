@@ -86,12 +86,21 @@ export function AnswerCard({ response, onCite }: AnswerCardProps) {
                   onClick={() => onCite(c)}
                   className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-secondary"
                 >
-                  <span className="mt-0.5 rounded-md bg-primary-soft px-1.5 text-sm font-semibold text-primary">
+                  <span
+                    className={cn(
+                      "mt-0.5 rounded-md px-1.5 text-sm font-semibold",
+                      c.kind === "user" ? "bg-status-clarify-bg text-status-clarify" : "bg-primary-soft text-primary",
+                    )}
+                  >
                     {toBnDigits(c.marker)}
                   </span>
                   <span className="min-w-0">
                     <span className="font-semibold">{c.citation}</span>
-                    <span className="text-muted-foreground"> — {c.title}</span>
+                    {c.kind === "user" ? (
+                      <span className="text-muted-foreground"> — আপনার নথি, সরকারি সূত্র নয়</span>
+                    ) : (
+                      <span className="text-muted-foreground"> — {c.title}</span>
+                    )}
                   </span>
                 </button>
               </li>

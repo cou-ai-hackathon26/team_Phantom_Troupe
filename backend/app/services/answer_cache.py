@@ -23,6 +23,7 @@ def cache_key(question: str, area: str | None, model: str | None, kind: str) -> 
 class AnswerCache(Protocol):
     async def get(self, key: str) -> dict | None: ...
     async def set(self, key: str, value: dict) -> None: ...
+    async def clear(self) -> None: ...
 
 
 class MemoryCache:
@@ -41,6 +42,9 @@ class MemoryCache:
         self._data.move_to_end(key)
         while len(self._data) > self.max_items:
             self._data.popitem(last=False)
+
+    async def clear(self) -> None:
+        self._data.clear()
 
 
 class PostgresCache:
@@ -80,6 +84,21 @@ class PostgresCache:
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
             logger.warning("cache write failed", extra={"data": {"error": type(exc).__name__}})
+
+    async def clear(self) -> None:
+        """Knowledge changed: cached answers (and refusals) may be stale."""
+        await self._memory.clear()
+        try:
+            from sqlalchemy import delete
+
+            from app.db.models import AnswerCache as Row
+            from app.db.session import get_sessionmaker
+
+            async with get_sessionmaker()() as session:
+                await session.execute(delete(Row))
+                await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("cache clear failed", extra={"data": {"error": type(exc).__name__}})
 
 
 _cache: AnswerCache | None = None

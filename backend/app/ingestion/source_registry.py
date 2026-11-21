@@ -31,10 +31,10 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def preserve_original(pdf: Path, area: str, originals_dir: Path = ORIGINALS_DIR) -> tuple[Path, str]:
+def preserve_original(pdf: Path, area: str, originals_dir: Path | None = None) -> tuple[Path, str]:
     """Copy into data/originals/<area>/ without ever overwriting a different file of the same name."""
     digest = sha256_of(pdf)
-    target_dir = originals_dir / area
+    target_dir = (originals_dir or ORIGINALS_DIR) / area
     target_dir.mkdir(parents=True, exist_ok=True)
     if pdf.resolve().is_relative_to(target_dir.resolve()):
         return pdf, digest
@@ -48,14 +48,16 @@ def preserve_original(pdf: Path, area: str, originals_dir: Path = ORIGINALS_DIR)
     return target, digest
 
 
-def load_registry(path: Path = REGISTRY_PATH) -> dict[str, DocumentSpec]:
+def load_registry(path: Path | None = None) -> dict[str, DocumentSpec]:
+    path = path or REGISTRY_PATH
     if not path.exists():
         return {}
     raw = json.loads(path.read_text(encoding="utf-8"))
     return {d["document_id"]: DocumentSpec(**d) for d in raw}
 
 
-def register(spec: DocumentSpec, path: Path = REGISTRY_PATH) -> None:
+def register(spec: DocumentSpec, path: Path | None = None) -> None:
+    path = path or REGISTRY_PATH
     specs = load_registry(path)
     specs[spec.document_id] = spec
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -74,9 +76,10 @@ def log_source(
     sha256: str,
     extraction_method: str,
     version_status: str,
-    path: Path = SOURCES_LOG,
+    path: Path | None = None,
 ) -> None:
     """Append a provenance row unless this exact file (sha256) is already logged for the document."""
+    path = path or SOURCES_LOG
     rows: list[dict[str, str]] = []
     if path.exists():
         with path.open(encoding="utf-8", newline="") as f:

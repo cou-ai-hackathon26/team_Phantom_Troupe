@@ -7,14 +7,17 @@ import { AreaCards } from "@/components/chat/area-cards";
 import { CitationSheet, type SourceView } from "@/components/chat/citation-sheet";
 import { Composer } from "@/components/chat/composer";
 import { MicButton } from "@/components/chat/mic-button";
+import { AttachButton, PersonalDocChip } from "@/components/chat/personal-doc";
 import { useSpeechInput } from "@/hooks/use-speech-input";
 import { toBnDigits } from "@/lib/bn";
-import { ApiError, askQuestion, getChunk } from "@/lib/api";
-import type { ChatResponse, Citation } from "@/lib/types";
+import { ApiError, askQuestion, deleteUserDoc, getChunk, uploadUserDoc } from "@/lib/api";
+import type { ChatResponse, Citation, UserDocInfo } from "@/lib/types";
 
 interface Turn {
   id: number;
   question: string;
+  docId?: string; // personal document the question was asked about
+  docName?: string;
   state: "loading" | "done" | "error";
   response?: ChatResponse;
   error?: string;
@@ -36,6 +39,33 @@ export default function ChatPage() {
   const endRef = useRef<HTMLDivElement>(null);
   const busy = turns.some((t) => t.state === "loading");
   const [showMicHint, setShowMicHint] = useState(false);
+  const [doc, setDoc] = useState<UserDocInfo | null>(null);
+  const [docUploading, setDocUploading] = useState<string | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
+
+  const attachDoc = async (file: File) => {
+    setDocError(null);
+    if (file.size > 25 * 1024 * 1024) {
+      setDocError("ফাইলটি ২৫ MB-এর বেশি। ছোট ফাইল দিন।");
+      return;
+    }
+    setDocUploading(file.name);
+    try {
+      if (doc) void deleteUserDoc(doc.doc_id).catch(() => undefined);
+      setDoc(await uploadUserDoc(file));
+      requestAnimationFrame(() => document.getElementById("question")?.focus());
+    } catch (err) {
+      setDoc(null);
+      setDocError(err instanceof ApiError ? err.message : "নথিটি পড়া যায়নি। আবার চেষ্টা করুন।");
+    } finally {
+      setDocUploading(null);
+    }
+  };
+
+  const removeDoc = () => {
+    if (doc) void deleteUserDoc(doc.doc_id).catch(() => undefined);
+    setDoc(null);
+  };
 
   // voice: final text goes into the input box for the user to check and edit — never auto-sent
   const voice = useSpeechInput((text) => {
@@ -61,14 +91,15 @@ export default function ChatPage() {
     voice.start();
   };
 
-  const run = useCallback(async (id: number, question: string) => {
+  const run = useCallback(async (id: number, question: string, docId?: string) => {
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "loading", error: undefined } : t)));
     try {
-      const response = await askQuestion({ message: question, debug: true });
+      const response = await askQuestion({ message: question, debug: true, user_doc_id: docId });
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "done", response } : t)));
       setAnnounce(`${STATUS_ANNOUNCE[response.status]}। ${response.answer}`);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "কিছু একটা সমস্যা হয়েছে। আবার চেষ্টা করুন।";
+      if (err instanceof ApiError && err.code === "user_doc_expired") setDoc(null);
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "error", error: message } : t)));
       setAnnounce(message);
     }
@@ -79,18 +110,24 @@ export default function ChatPage() {
       const question = raw.trim();
       if (question.length < 2 || busy) return;
       const id = nextId.current++;
-      setTurns((prev) => [...prev, { id, question, state: "loading" }]);
+      setTurns((prev) => [...prev, { id, question, state: "loading", docId: doc?.doc_id, docName: doc?.filename }]);
       setInput("");
-      void run(id, question);
+      void run(id, question, doc?.doc_id);
     },
-    [busy, run],
+    [busy, run, doc],
   );
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    // follow the conversation, but never scroll the empty home screen away from its heading
+    if (turns.length > 0) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns]);
 
   const openCitation = (c: Citation) => {
+    if (c.kind === "user") {
+      // the user's own document: show the passage we already have; it is not in the knowledge base
+      setSource({ marker: c.marker, citation: c.citation, title: c.title, text: c.excerpt, notes: [], sourceUrl: null, personal: true });
+      return;
+    }
     const base: SourceView = {
       marker: c.marker,
       citation: c.citation,
@@ -115,10 +152,10 @@ export default function ChatPage() {
           <div className="space-y-6">
             {turns.map((turn) => (
               <div key={turn.id} className="space-y-3">
-                <UserBubble text={turn.question} />
+                <UserBubble text={turn.question} attachment={turn.docName} />
                 {turn.state === "loading" && <AnswerSkeleton />}
                 {turn.state === "error" && (
-                  <AnswerError message={turn.error ?? ""} onRetry={() => void run(turn.id, turn.question)} />
+                  <AnswerError message={turn.error ?? ""} onRetry={() => void run(turn.id, turn.question, turn.docId)} />
                 )}
                 {turn.state === "done" && turn.response && <AnswerCard response={turn.response} onCite={openCitation} />}
               </div>
@@ -138,6 +175,16 @@ export default function ChatPage() {
           onSubmit={() => ask(input)}
           busy={busy}
           mic={<MicButton state={voice.state} onStart={startVoice} onStop={voice.stop} disabled={busy} />}
+          attach={<AttachButton onPick={(f) => void attachDoc(f)} busy={docUploading !== null} disabled={busy} />}
+          top={
+            <PersonalDocChip
+              doc={doc}
+              uploading={docUploading}
+              error={docError}
+              onRemove={removeDoc}
+              onDismissError={() => setDocError(null)}
+            />
+          }
           hint={
             <VoiceStatus
               state={voice.state}

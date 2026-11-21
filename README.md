@@ -20,23 +20,57 @@ question (voice/text) ─► Call 1: normalize dialect/Banglish → standard Ban
 - Citations are built from stored metadata (title, section, page, official URL, amendment notes), never from model text.
 - Offline ingestion: bdlaws PDF parsing (rebuilds Bangla words PyMuPDF splits, margin titles, footnotes), text repair, Bijoy → Unicode, local OCR, section-aware chunking, then Postgres + Qdrant + BM25.
 
-## Setup (≈10 commands)
+## Run it
 
-Requirements: Python 3.12 via [uv](https://docs.astral.sh/uv/), Node.js 22, ffmpeg. For scanned PDFs only, also Tesseract with Bengali data (`sudo dnf install tesseract tesseract-langpack-ben`).
+**One-time setup:**
 
 ```bash
-cp .env.example .env                                  # fill in the values (free tiers, no card)
+cp .env.example .env            # fill in DATABASE_URL, QDRANT_URL/KEY, GROQ_API_KEY, LLM_MODEL, ADMIN_TOKEN
 cd backend
 uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt
-.venv/bin/python scripts/check_connections.py         # OK for postgres, qdrant, groq
-.venv/bin/python scripts/convert_pdfs.py              # data/<folder>/*.pdf -> data/processed/*.jsonl
-.venv/bin/python scripts/create_tables.py             # Supabase tables (idempotent)
-.venv/bin/python scripts/ingest_jsonl.py              # chunks -> Postgres + Qdrant + BM25 (idempotent)
-.venv/bin/uvicorn app.main:app --port 8000            # API; docs at http://localhost:8000/docs
-cd ../frontend && npm install && npm run dev          # UI at http://localhost:3000 (use Chrome for voice)
+.venv/bin/python scripts/check_connections.py    # expect OK for postgres, qdrant and groq
+.venv/bin/python scripts/convert_pdfs.py         # data/<folder>/*.pdf -> data/processed/*.jsonl
+.venv/bin/python scripts/create_tables.py        # Supabase tables (idempotent)
+.venv/bin/python scripts/ingest_jsonl.py         # Postgres + Qdrant + BM25 (idempotent)
+cd ../frontend && npm install
 ```
 
-### Environment variables (`.env`, names only — see `.env.example`)
+**Every time, in two terminals:**
+
+```bash
+# terminal 1: API on :8000 (docs at http://localhost:8000/docs)
+cd backend && .venv/bin/uvicorn app.main:app --port 8000
+
+# terminal 2: UI on :3000 (open in Chrome for voice)
+cd frontend && npm run dev               # or for the demo: npm run build && npx next start -p 3000
+```
+
+Then open:
+- <http://localhost:3000> to ask questions by voice or text, and attach your own document with 📎
+- <http://localhost:3000/admin> to manage the knowledge base (sign in with `ADMIN_TOKEN` from `.env`)
+- <http://localhost:3000/sources> and <http://localhost:3000/about> for browsing documents and the evaluation results
+
+The frontend talks to `http://localhost:8000` by default. Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` if the API runs elsewhere, and add the UI's origin to `CORS_ORIGINS` in `.env`.
+
+Requirements: Python 3.12 via [uv](https://docs.astral.sh/uv/), Node.js 22, ffmpeg. For OCR: Tesseract with Bengali (`sudo dnf install tesseract tesseract-langpack-ben`); EasyOCR is installed from `requirements.txt` as the second engine.
+
+## Admin panel (`/admin`)
+
+- **See the knowledge** the AI answers from: every document per area, with section and chunk counts, issuer and source link, and the full text of each section.
+- **Upload** an official PDF (text, old Bijoy font or scanned) or an image, with its area, official title, issuer and source URL. Ingestion runs in the background with live steps: original preserved with sha256, text extraction and OCR, chunking, local embedding, Qdrant, Postgres, then the BM25 index is swapped into the running API. The document is answerable immediately, and re-uploading the same document ID replaces the old version.
+- **Delete** a document: it's removed from Qdrant, Postgres, BM25 and the processed data. Built-in documents (registered in `area_map.py`) can't be deleted here.
+- Every change clears the answer cache, so earlier answers and refusals are recomputed.
+- Protected by `ADMIN_TOKEN` (`Authorization: Bearer …`). If `ADMIN_TOKEN` is unset, the admin API is disabled.
+
+## Personal documents (users)
+
+On the chat screen, 📎 attaches a PDF or photo (deed, appointment letter, notice…). The text is extracted, using local OCR for scans and photos, and then:
+
+- it is **never embedded or added to the knowledge base**, never written to disk or a database, never cached, and never logged
+- it lives in server memory for `USER_DOC_TTL_MINUTES` (default 60), or until the user removes it
+- for each question, the most relevant passages of the document go to the answer step next to the official sources, and the answer cites them separately as **আপনার নথি**, never as law
+
+## Environment variables (`.env`, names only — see `.env.example`)
 
 | Variable | Purpose |
 |---|---|
@@ -46,6 +80,8 @@ cd ../frontend && npm install && npm run dev          # UI at http://localhost:3
 | `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `EMBEDDING_DEVICE` | local `intfloat/multilingual-e5-base`, 768 dims |
 | `RETRIEVAL_MIN_SCORE` | score gate (tune with `scripts/run_eval.py`) |
 | `OCR_PROVIDER`, `OCR_SECOND_ENGINE`, `OCR_DEVICE`, `OCR_MIN_CONFIDENCE` | local OCR only |
+| `ADMIN_TOKEN`, `MAX_UPLOAD_MB` | admin panel secret (long random string) and upload size limit |
+| `USER_DOC_TTL_MINUTES` | how long a user's personal document stays in memory |
 | `NEXT_PUBLIC_API_URL` | in `frontend/.env.local`, default `http://localhost:8000` |
 
 ## Adding documents
@@ -84,6 +120,9 @@ cd ../frontend && npm run lint && npm run build
 | POST | `/api/v1/chat/voice/transcribe` | audio (≤10 MB, ≤30 s) → `{transcript}` (Groq Whisper fallback; silence and prompt echoes rejected) |
 | POST | `/api/v1/chat/voice` | audio → chat response + `transcript` |
 | GET | `/api/v1/sources`, `/sources/documents/{id}`, `/sources/{chunk_id}` | browse documents, sections, full text with amendment notes |
+| POST | `/api/v1/user-docs` | personal PDF or image → `{doc_id, filename, pages, methods, preview, expires_at}` (in memory only); pass `user_doc_id` to `/chat` |
+| DELETE | `/api/v1/user-docs/{doc_id}` | remove a personal document now |
+| GET/POST/DELETE | `/api/v1/admin/documents[/{id}]`, `/admin/jobs[/{id}]`, `/admin/check` | knowledge-base management (Bearer `ADMIN_TOKEN`) |
 | POST | `/api/v1/feedback` | `{query_log_id, rating: up\|down}` |
 | GET | `/api/v1/health`, `/api/v1/eval/latest` | service status; latest evaluation |
 
@@ -117,7 +156,7 @@ The hackathon rules require crediting every tool, library, model and data source
 
 **Models and services:** [intfloat/multilingual-e5-base](https://huggingface.co/intfloat/multilingual-e5-base) (embeddings, run locally) · [Groq](https://groq.com) free tier: `openai/gpt-oss-20b` (OpenAI open-weight model) for answers, `whisper-large-v3` (OpenAI Whisper) for speech-to-text fallback · [Supabase](https://supabase.com) (PostgreSQL) · [Qdrant Cloud](https://qdrant.tech) (vector database) · browser Web Speech API (Chrome speech recognition)
 
-**Backend libraries:** FastAPI · Pydantic / pydantic-settings · Uvicorn · SQLAlchemy · asyncpg · qdrant-client · groq SDK · httpx · sentence-transformers · Hugging Face Transformers · PyTorch · rank-bm25 · PyMuPDF · pytesseract / Tesseract OCR · EasyOCR (optional) · Pillow · NumPy · ffmpeg · pytest · ruff · uv
+**Backend libraries:** FastAPI · Pydantic / pydantic-settings · Uvicorn · SQLAlchemy · asyncpg · qdrant-client · groq SDK · httpx · sentence-transformers · Hugging Face Transformers · PyTorch · rank-bm25 · PyMuPDF · pytesseract / Tesseract OCR · EasyOCR · Pillow · NumPy · ffmpeg · pytest · ruff · uv
 
 **Frontend libraries:** Next.js · React · TypeScript · Tailwind CSS · shadcn/ui · Radix UI · lucide-react · tw-animate-css · Hind Siliguri font (Google Fonts)
 

@@ -22,7 +22,7 @@ export function MicButton({ state, onStart, onStop, disabled }: MicButtonProps) 
       aria-pressed={active}
       aria-label={active ? "শোনা বন্ধ করুন" : busy ? "কথা লেখায় রূপান্তর হচ্ছে" : "মাইকে প্রশ্ন বলুন"}
       className={cn(
-        "relative flex size-14 shrink-0 items-center justify-center rounded-full text-primary-foreground transition-colors sm:size-16",
+        "relative flex size-12 shrink-0 items-center justify-center rounded-full text-primary-foreground transition-colors sm:size-16",
         active ? "bg-destructive" : "bg-primary hover:bg-primary/90",
         "disabled:opacity-60",
       )}

@@ -17,3 +17,4 @@ numpy
 pytest
 pytest-asyncio
 ruff
+easyocr

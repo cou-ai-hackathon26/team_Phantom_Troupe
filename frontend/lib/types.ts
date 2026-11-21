@@ -18,10 +18,12 @@ export interface ChatRequest {
   message: string;
   area?: Area;
   debug?: boolean;
+  user_doc_id?: string;
 }
 
 export interface Citation {
   marker: number;
+  kind: "official" | "user";
   chunk_id: string;
   act: string;
   section: string;
@@ -67,8 +69,59 @@ export interface ChatResponse {
 }
 
 export interface ApiErrorDetail {
-  code: "rate_limited" | "llm_not_configured" | "llm_unavailable" | "index_missing";
+  code: string; // rate_limited | llm_not_configured | llm_unavailable | index_missing | user_doc_expired | unauthorized | …
   message: string;
+}
+
+export interface UserDocInfo {
+  doc_id: string;
+  filename: string;
+  pages: number;
+  chars: number;
+  methods: string[];
+  needs_review: boolean;
+  preview: string;
+  expires_at: string;
+}
+
+export interface AdminDocument {
+  document_id: string;
+  title: string;
+  area: string;
+  issuer: string | null;
+  source_url: string | null;
+  sections: number;
+  chunks: number;
+  builtin: boolean;
+  source_files: string[];
+}
+
+export interface AdminSection {
+  id: string;
+  section: string;
+  title: string;
+  citation: string;
+  chars: number;
+  notes: number;
+  page_start: number | null;
+  source_file: string;
+  text: string;
+}
+
+export interface AdminJob {
+  id: string;
+  filename: string;
+  document_id: string;
+  title: string;
+  area: string;
+  status: "queued" | "running" | "done" | "failed";
+  steps: string[];
+  error: string | null;
+  sections: number;
+  chunks: number;
+  needs_review: boolean;
+  created_at: string;
+  finished_at: string | null;
 }
 
 export interface DocumentSummary {

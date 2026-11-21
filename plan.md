@@ -234,6 +234,21 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [ ] Rehearse the demo in Chrome with a real microphone; rehearse the offline profile once
 - [ ] Final QA after the remaining documents are ingested
 
+## Phase 10 — Admin knowledge panel and personal documents (added 21 Nov, team request)
+
+**Goal:** admins see and manage the knowledge the AI uses; users can ask about their own document without it ever entering the knowledge base.
+
+- [x] `ADMIN_TOKEN` auth (`core/security.py`, Bearer token, constant-time compare; admin API disabled when unset)
+- [x] Admin API: list documents, view sections and full text, upload PDF or image as a background job with live steps, job status, delete (`api/routes/admin.py`, `services/knowledge_admin.py`)
+- [x] Incremental indexing: only the uploaded document is embedded; BM25 rebuilt and swapped into the running API; Qdrant delete by `document_id`; single-document Postgres write; answer cache cleared on every change; one job at a time; GPU freed before OCR
+- [x] Upload text extraction for PDF (text, Bijoy, OCR) and images (`ingestion/upload_text.py`); EasyOCR installed as the second engine, Tesseract (installed) first
+- [x] Personal documents: in-memory store with 1 h TTL and unguessable ids, never embedded or stored, passage selection with BM25Plus (`services/user_docs.py`, `api/routes/user_docs.py`)
+- [x] Chat with `user_doc_id`: user passages `[U…]` next to official `[C…]` (≤3 official passages to save tokens), separate prompt rules (`prompts/answer_user_doc.md`), citations `kind: "user"`, no cache, no logged text, no pre-answer refusal; still ≤2 LLM calls
+- [x] Frontend: `/admin` (sign in, per-area summary, upload form, job progress, document list with view and delete); chat 📎 attach button, document chip, "আপনার নথি" citations and sheet; header admin link; mobile layout fixes
+- [x] Tests: 10 new (admin auth, upload → incremental index → delete with fakes, user-doc store and TTL, upload endpoint, private chat path, expired doc). 120 backend tests pass.
+- [x] Verified live in Chromium: wrong and right token; upload of a real bdlaws PDF → job done → visible → viewed → deleted (stores back to 55 = 55 = 55); a scanned image attached → Tesseract OCR → answer citing "আপনার নথি"; no page errors; 360 px without overflow
+- [ ] Set a long random `ADMIN_TOKEN` in `.env` (team)
+
 ---
 
 ## Risks and mitigations
@@ -265,3 +280,4 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - The Bijoy converter table is core-only and untested on a real legacy-font PDF. Tesseract isn't installed on the dev laptop; the Surya and PaddleOCR adapters aren't wired.
 - A few glyphs are missing from the bdlaws PDF text layer (e.g. `ং` after some conjuncts: `প্রিন্টি প্রেস`), and some source pages carry their own legacy typos (`পরবতী`). These are kept as in the source.
 - Voice input was checked with a scripted recognizer and Chromium's fake microphone, not yet with a real microphone.
+- Admin jobs and personal documents live in the API process's memory: a restart loses running job status and attached personal documents (by design for personal documents). Run a single API worker.

@@ -8,6 +8,7 @@ const NAV = [
   { href: "/", label: "হোম" },
   { href: "/sources", label: "নথিসমূহ" },
   { href: "/about", label: "কীভাবে কাজ করে" },
+  { href: "/admin", label: "অ্যাডমিন" },
 ];
 
 export function SiteHeader() {
@@ -22,7 +23,7 @@ export function SiteHeader() {
           <span className="hidden text-sm text-muted-foreground sm:block">সরকারি নথি থেকে আপনার অধিকারের উত্তর</span>
         </Link>
         <nav aria-label="প্রধান মেনু">
-          <ul className="flex items-center gap-1 text-[0.95rem]">
+          <ul className="flex items-center gap-0.5 text-[0.9rem] sm:gap-1 sm:text-[0.95rem]">
             {NAV.map((item) => {
               const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               return (
@@ -31,7 +32,7 @@ export function SiteHeader() {
                     href={item.href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "rounded-lg px-3 py-1.5 transition-colors hover:bg-secondary",
+                      "whitespace-nowrap rounded-lg px-2 py-1.5 transition-colors hover:bg-secondary sm:px-3",
                       active ? "font-semibold text-primary" : "text-muted-foreground",
                     )}
                   >

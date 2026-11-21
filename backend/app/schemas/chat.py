@@ -9,10 +9,12 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=2, max_length=2000)
     area: Area | None = None
     debug: bool = False
+    user_doc_id: str | None = Field(None, max_length=64)  # a personal document uploaded via /user-docs
 
 
 class Citation(BaseModel):
     marker: int  # 1-based; shown as [১], [২] … in the answer text
+    kind: Literal["official", "user"] = "official"  # "user" = the user's own uploaded document
     chunk_id: str
     act: str
     section: str

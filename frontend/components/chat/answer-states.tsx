@@ -1,4 +1,4 @@
-import { RefreshCw, TriangleAlert } from "lucide-react";
+import { FileText, RefreshCw, TriangleAlert } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function AnswerSkeleton() {
@@ -36,9 +36,14 @@ export function AnswerError({ message, onRetry }: { message: string; onRetry: ()
   );
 }
 
-export function UserBubble({ text }: { text: string }) {
+export function UserBubble({ text, attachment }: { text: string; attachment?: string }) {
   return (
-    <div className="flex justify-end">
+    <div className="flex flex-col items-end gap-1">
+      {attachment && (
+        <span className="inline-flex max-w-[85%] items-center gap-1.5 truncate rounded-full border bg-card px-2.5 py-0.5 text-sm text-muted-foreground">
+          <FileText className="size-3.5 shrink-0" aria-hidden /> {attachment}
+        </span>
+      )}
       <p className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-[1.05rem] leading-relaxed text-primary-foreground">
         {text}
       </p>

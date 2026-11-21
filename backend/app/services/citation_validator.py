@@ -14,7 +14,7 @@ from app.schemas.chat import Citation
 from app.schemas.ingestion import ChunkRecord
 from app.schemas.llm import AnswerOutput
 
-_MARKER_GROUP = re.compile(r"\[\s*(C\d+(?:\s*[,，、]\s*C\d+)*)\s*\]", re.IGNORECASE)
+_MARKER_GROUP = re.compile(r"\[\s*([CU]\d+(?:\s*[,，、]\s*[CU]\d+)*)\s*\]", re.IGNORECASE)
 _LIST_NUMBER = re.compile(r"(?m)^\s*[0-9০-৯]{1,2}\s*[.।)]\s+")
 _NUMBER = re.compile(r"[0-9০-৯]+(?:[.,][0-9০-৯]+)*")
 _BARE_MARKER = re.compile(r"\[\s*[0-9০-৯]{1,2}\s*\]")  # "[৫]" written by the model itself: not ours, drop
@@ -138,9 +138,12 @@ def validate_answer(output: AnswerOutput, labelled: dict[str, ChunkRecord]) -> V
             section=labelled[label].section,
             title=labelled[label].title,
             citation=labelled[label].citation,
-            excerpt=_excerpt(labelled[label].text),
+            excerpt=labelled[label].text[:1200]
+            if getattr(labelled[label], "kind", "official") == "user"
+            else _excerpt(labelled[label].text),
             source_url=labelled[label].source_url,
             notes=labelled[label].notes,
+            kind="user" if getattr(labelled[label], "kind", "official") == "user" else "official",
         )
         for label in order
     ]

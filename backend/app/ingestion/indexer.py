@@ -62,7 +62,10 @@ async def write_postgres(session: AsyncSession, chunks: Sequence[ChunkRecord], s
     return int((await session.execute(select(func.count()).select_from(Chunk))).scalar_one())
 
 
-async def write_qdrant(repo: QdrantRepository, chunks: Sequence[ChunkRecord], vectors: np.ndarray) -> int:
+async def write_qdrant(
+    repo: QdrantRepository, chunks: Sequence[ChunkRecord], vectors: np.ndarray, cleanup: bool = True
+) -> int:
+    """Upsert in batches. cleanup=True (full ingest) also deletes points of chunks not in `chunks`."""
     for start in range(0, len(chunks), QDRANT_BATCH):
         batch = chunks[start : start + QDRANT_BATCH]
         await repo.upsert(
@@ -79,7 +82,8 @@ async def write_qdrant(repo: QdrantRepository, chunks: Sequence[ChunkRecord], ve
                 for c in batch
             ],
         )
-    await repo.delete_missing({c.id for c in chunks})
+    if cleanup:
+        await repo.delete_missing({c.id for c in chunks})
     return await repo.count()
 
 
@@ -87,3 +91,30 @@ def write_bm25(chunks: list[ChunkRecord], path) -> int:  # noqa: ANN001 - pathli
     index = BM25Index.build(chunks)
     index.save(path)
     return len(BM25Index.load(path))
+
+
+async def write_postgres_document(spec: DocumentSpec, chunks: Sequence[ChunkRecord], source_file: str) -> None:
+    """Upsert ONE document and replace its chunks (admin upload); other documents are untouched."""
+    from app.db.session import get_sessionmaker
+
+    async with get_sessionmaker()() as session:
+        values = {
+            "id": spec.document_id,
+            "title": spec.title,
+            "area": spec.area,
+            "issuer": spec.issuer,
+            "source_url": spec.source_url,
+            "source_file": source_file,
+            "language": spec.language,
+        }
+        await session.execute(
+            insert(Document)
+            .values(**values)
+            .on_conflict_do_update(index_elements=[Document.id], set_={k: v for k, v in values.items() if k != "id"})
+        )
+        await session.execute(delete(Chunk).where(Chunk.document_id == spec.document_id))
+        for c in chunks:
+            await session.execute(
+                insert(Chunk).values(**c.model_dump(exclude={"id"}), id=c.id, qdrant_point_id=point_id_for(c.id))
+            )
+        await session.commit()

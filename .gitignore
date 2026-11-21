@@ -145,3 +145,6 @@ logs/
 # ---------------------------------------------------------------------
 .agents/
 .claude/settings.local.json
+
+# admin upload temp files (originals are preserved in data/originals/)
+data/uploads/

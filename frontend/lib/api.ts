@@ -1,4 +1,7 @@
 import type {
+  AdminDocument,
+  AdminJob,
+  AdminSection,
   ApiErrorDetail,
   ChatRequest,
   ChatResponse,
@@ -6,6 +9,7 @@ import type {
   DocumentDetail,
   DocumentSummary,
   HealthReport,
+  UserDocInfo,
 } from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -14,7 +18,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly code?: ApiErrorDetail["code"] | "network",
+    public readonly code?: string,
   ) {
     super(message);
   }
@@ -76,3 +80,44 @@ export function transcribeAudio(blob: Blob) {
   form.append("audio", blob, `question.${ext}`);
   return request<{ transcript: string }>("/chat/voice/transcribe", { method: "POST", body: form });
 }
+
+// ---- personal documents (kept in server memory for 1 hour; never added to the knowledge base)
+export function uploadUserDoc(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return request<UserDocInfo>("/user-docs", { method: "POST", body: form });
+}
+
+export const deleteUserDoc = (docId: string) =>
+  request<{ deleted: boolean }>(`/user-docs/${encodeURIComponent(docId)}`, { method: "DELETE" });
+
+// ---- admin (token in the Authorization header)
+const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+export const adminCheck = (token: string) =>
+  request<{ ok: boolean; llm_model: string | null; embedding_model: string }>("/admin/check", { headers: auth(token) });
+
+export const adminDocuments = (token: string) => request<AdminDocument[]>("/admin/documents", { headers: auth(token) });
+
+export const adminDocument = (token: string, id: string) =>
+  request<{ document: AdminDocument; sections: AdminSection[] }>(`/admin/documents/${encodeURIComponent(id)}`, {
+    headers: auth(token),
+  });
+
+export function adminUpload(token: string, file: File, meta: Record<string, string>) {
+  const form = new FormData();
+  form.append("file", file);
+  Object.entries(meta).forEach(([k, v]) => v && form.append(k, v));
+  return request<AdminJob>("/admin/documents", { method: "POST", body: form, headers: auth(token) });
+}
+
+export const adminJob = (token: string, id: string) =>
+  request<AdminJob>(`/admin/jobs/${encodeURIComponent(id)}`, { headers: auth(token) });
+
+export const adminJobs = (token: string) => request<AdminJob[]>("/admin/jobs", { headers: auth(token) });
+
+export const adminDelete = (token: string, id: string) =>
+  request<{ deleted: string; chunks_remaining: number }>(`/admin/documents/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: auth(token),
+  });

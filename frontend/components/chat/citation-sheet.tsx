@@ -13,6 +13,7 @@ export interface SourceView {
   notes: string[];
   sourceUrl: string | null;
   loading?: boolean;
+  personal?: boolean; // passage from the user's own uploaded document
 }
 
 interface CitationSheetProps {
@@ -35,6 +36,9 @@ export function CitationSheet({ source, onOpenChange }: CitationSheetProps) {
               <p className="flex items-center gap-2 text-sm font-semibold text-primary">
                 <FileText className="size-4" aria-hidden />
                 {source.marker ? `সূত্র ${toBnDigits(source.marker)}` : "সূত্র"}
+                {source.personal && (
+                  <span className="rounded-full bg-status-clarify-bg px-2 py-0.5 text-xs text-status-clarify">আপনার নথি</span>
+                )}
               </p>
               <SheetTitle className="text-lg leading-snug">{source.citation}</SheetTitle>
               <SheetDescription className="text-base text-foreground/80">{source.title}</SheetDescription>
@@ -60,7 +64,9 @@ export function CitationSheet({ source, onOpenChange }: CitationSheetProps) {
                 </details>
               )}
               <p className="mt-4 text-sm text-muted-foreground">
-                এখানে নথির প্রাসঙ্গিক অংশ দেখানো হয়েছে। চূড়ান্ত নিশ্চয়তার জন্য মূল উৎস দেখুন।
+                {source.personal
+                  ? "এটি আপনার আপলোড করা নথি থেকে পড়া অংশ (সরকারি আইন নয়)। নথিটি সংরক্ষণ করা হয়নি।"
+                  : "এখানে নথির প্রাসঙ্গিক অংশ দেখানো হয়েছে। চূড়ান্ত নিশ্চয়তার জন্য মূল উৎস দেখুন।"}
               </p>
             </div>
             {source.sourceUrl && (
