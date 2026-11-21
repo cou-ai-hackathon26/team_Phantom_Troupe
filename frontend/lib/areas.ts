@@ -1,4 +1,4 @@
-import { Briefcase, HandCoins, Landmark, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Briefcase, HandCoins, Landmark, Scale, ShieldCheck, type LucideIcon } from "lucide-react";
 import type { Area } from "./types";
 
 export interface AreaInfo {
@@ -38,6 +38,13 @@ export const AREAS: AreaInfo[] = [
     description: "নিয়োগ, ছুটি, লে-অফ, ছাঁটাই",
     icon: Briefcase,
     examples: ["লে-অফ হলে শ্রমিক কি ক্ষতিপূরণ পায়?", "চাকরি থেকে ছাঁটাই করলে কী কী পাওনা পাব?"],
+  },
+  {
+    id: "general",
+    label: "অন্যান্য আইন",
+    description: "বাংলাদেশের অন্যান্য আইন, মানবাধিকার কমিশন",
+    icon: Scale,
+    examples: ["তথ্য অধিকার আইনে কীভাবে তথ্য চাইতে হয়?", "জাতীয় মানবাধিকার কমিশনে কীভাবে অভিযোগ করা যায়?"],
   },
 ];
 

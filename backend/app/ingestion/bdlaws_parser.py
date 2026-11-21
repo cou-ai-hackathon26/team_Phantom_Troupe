@@ -37,6 +37,14 @@ _CLAUSE_START = re.compile(r"^\[?\s*\((?:[০-৯]+[ক-ঞ]?(?:-[ক-ঞ])?|[�
 _SECTION_SUFFIX = dict(zip("কখগঘঙচছজঝঞ", "abcdefghij", strict=True))
 
 END_MARKERS = ("Ministry of Law, Justice and Parliamentary Affairs",)
+# print header of the 2026 layout (printed date + site name), which sits just inside the body area
+_PRINT_HEADER = re.compile(r"^(?:[0-9]{2}/[0-9]{2}/[0-9]{4}|Laws of Bangladesh)$")
+# 2026 prints sometimes glue the margin title to the body's first row in one text line:
+# "তথ্য তলবের ক্ষমতা২৩৭৷ এই …" or "খাবার কক্ষ, ইত্যাদি1[ ৯৩। (১) …" -> title + body
+_GLUED_TITLE = re.compile(r"^(?P<title>[^০-৯।৷\[\]]{2,60}?)(?P<body>[0-9]{0,2}\[?\s*[০-৯]{1,3}[ক-ঞ]?[।৷].*)$")
+BODY_X0 = 120.5
+_ACT_NUMBER = re.compile(r"^\(.*সনের.*নং.*\)$")
+_DATE_LINE = re.compile(r"^\[.*\]$")
 
 
 @dataclass
@@ -114,7 +122,13 @@ def parse_bdlaws_pdf(path: str | Path) -> ParsedBdlaws:
                 if in_body_area(row):
                     stream.append((_Line(pno, row.y_mid, row.x0, row.text), True))
             for row in extract_rows(page, keep=lambda x0, x1: not _is_margin(x0, x1)):
-                if in_body_area(row):
+                if not in_body_area(row):
+                    continue
+                glued = _GLUED_TITLE.match(row.text) if row.x0 < MARGIN_X0_MAX else None
+                if glued:
+                    stream.append((_Line(pno, row.y_mid, row.x0, glued.group("title")), True))
+                    stream.append((_Line(pno, row.y_mid, BODY_X0, glued.group("body")), False))
+                else:
                     stream.append((_Line(pno, row.y_mid, row.x0, row.text), False))
 
     stream.sort(key=lambda item: (item[0].page, item[0].y, item[0].x0))
@@ -139,26 +153,41 @@ def _assemble(out: ParsedBdlaws, stream: list[tuple[_Line, bool]]) -> None:
             out.notes.append(_strip_double_spaces(_clean(" ".join(footnote))))
             footnote.clear()
 
+    title_margins: list[str] = []  # margin rows seen in the title block: the first section's title
     for i, (line, is_margin) in enumerate(stream):
         text = line.text.strip()
         if not text or any(marker in text for marker in END_MARKERS) or text.startswith("Copyright"):
             continue
+        if _PRINT_HEADER.match(text):
+            continue
         cleaned = _clean(text)
 
-        # ---- title block: act, act number, date, chapter heading + chapter name; then preamble
+        # ---- title block: act, act number, date, chapter heading + chapter name; then preamble.
+        # Older prints centre the block (x0 >= CENTRED_X0_MIN); 2026 prints left-align it, so rows are
+        # recognised by content. The block ends at the chapter name or, in acts without chapters
+        # (e.g. amendment acts), at the first section-number row.
         if not seen_chapter:
-            if line.x0 >= CENTRED_X0_MIN:
-                if out.act is None:
-                    out.act = cleaned
-                elif _CHAPTER.search(cleaned):
+            if not is_margin and _is_section_start(line):
+                seen_chapter = True
+                pending_titles.extend(title_margins)
+            else:
+                if _CHAPTER.search(cleaned):
                     chapter_parts = [cleaned]
                 elif chapter_parts:
                     chapter_parts.append(cleaned)
                     out.chapter = " — ".join(chapter_parts)
                     seen_chapter = True
-            elif not is_margin:
-                out.preamble.append(_strip_footnote_refs(cleaned))
-            continue
+                elif _ACT_NUMBER.match(cleaned) or _DATE_LINE.match(cleaned):
+                    pass
+                elif out.act is None and (line.x0 >= CENTRED_X0_MIN or not is_margin):
+                    out.act = cleaned
+                elif line.x0 >= CENTRED_X0_MIN:
+                    pass
+                elif is_margin:
+                    title_margins.append(cleaned)
+                else:
+                    out.preamble.append(_strip_footnote_refs(cleaned))
+                continue
 
         # ---- amendment footnotes: introduced by an ASCII number in the margin zone; run to the end
         number = _FOOTNOTE_NUM.match(text) if line.x0 < MARGIN_X0_MAX else None
@@ -187,7 +216,8 @@ def _assemble(out: ParsedBdlaws, stream: list[tuple[_Line, bool]]) -> None:
 
         # ---- body
         body = _strip_footnote_refs(cleaned)
-        if _is_section_start(line):
+        # a section-print file holds one section; later "N।" rows are text it inserts (amendment acts)
+        if _is_section_start(line) and current is None:
             number_match = _SECTION_START.match(body)
             assert number_match is not None
             current = _SectionDraft(number=number_match.group(1), page=line.page, y=line.y)

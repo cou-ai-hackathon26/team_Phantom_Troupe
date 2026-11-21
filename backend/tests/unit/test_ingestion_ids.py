@@ -28,7 +28,8 @@ def test_unknown_sources_fail_loudly() -> None:
         spec_for_folder("Random folder")
     with pytest.raises(UnknownSource):
         spec_for_source_file("unknown.jsonl")
-    assert spec_for_folder("Workers — Bangladesh Labour Act 2006").area == "labour"
+    with pytest.raises(UnknownSource):  # built-in PDFs now come from data/DataSet (dataset_sources.py)
+        spec_for_folder("Workers — Bangladesh Labour Act 2006")
 
 
 def test_read_jsonl_rejects_duplicate_ids(tmp_path: Path) -> None:

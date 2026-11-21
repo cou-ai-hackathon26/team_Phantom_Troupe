@@ -1,6 +1,6 @@
 // Mirrors backend/app/schemas — keep in sync.
 
-export type Area = "land" | "gd" | "allowance" | "labour";
+export type Area = "land" | "gd" | "allowance" | "labour" | "general";
 export type Status = "answered" | "partial" | "refused" | "clarify";
 
 export interface ServiceStatus {

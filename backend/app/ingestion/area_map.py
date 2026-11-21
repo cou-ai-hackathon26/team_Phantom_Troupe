@@ -14,22 +14,14 @@ class DocumentSpec:
     area: Area
     title: str
     issuer: str
-    parser: str  # "bdlaws" (section-print PDFs) | "generic_pdf" | "jsonl"
+    parser: str  # "bdlaws" (section-print PDFs) | "generic" | "markdown" | "sqlite" | "jsonl"
     language: str = "bn"
     source_url: str | None = None
 
 
-# data/<folder>/*.pdf  ->  document
-PDF_FOLDERS: dict[str, DocumentSpec] = {
-    "Workers — Bangladesh Labour Act 2006": DocumentSpec(
-        document_id="labour-act-2006",
-        area="labour",
-        title="বাংলাদেশ শ্রম আইন, ২০০৬",
-        issuer="লেজিসলেটিভ ও সংসদ বিষয়ক বিভাগ, আইন, বিচার ও সংসদ বিষয়ক মন্ত্রণালয়",
-        parser="bdlaws",
-        source_url="https://bdlaws.minlaw.gov.bd/act-952.html",
-    ),
-}
+# data/<folder>/*.pdf  ->  document (scripts/convert_pdfs.py). Empty since 21 Nov: the built-in documents
+# now come from data/DataSet via app/ingestion/dataset_sources.py and scripts/ingest_dataset.py.
+PDF_FOLDERS: dict[str, DocumentSpec] = {}
 
 # data/processed/all_documents.jsonl  source_file  ->  document (filled when the team's JSONL arrives)
 JSONL_SOURCE_FILES: dict[str, DocumentSpec] = {}

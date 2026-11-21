@@ -68,7 +68,9 @@ def slugify(text: str) -> str:
 
 
 def builtin_ids() -> set[str]:
-    return {s.document_id for s in PDF_FOLDERS.values()}
+    from app.ingestion.dataset_indexer import dataset_specs
+
+    return {s.document_id for s in PDF_FOLDERS.values()} | set(dataset_specs())
 
 
 def list_jobs() -> list[Job]:
@@ -249,6 +251,7 @@ class DocumentRow:
 
 def list_documents() -> list[DocumentRow]:
     specs = document_specs()
+    builtin = builtin_ids()
     rows: dict[str, DocumentRow] = {}
     for c in get_retriever().chunks.values():
         spec = specs.get(c.document_id)
@@ -262,11 +265,12 @@ def list_documents() -> list[DocumentRow]:
                 source_url=spec.source_url if spec else None,
                 sections=0,
                 chunks=0,
-                builtin=c.document_id in builtin_ids(),
+                builtin=c.document_id in builtin,
                 source_files=[],
             ),
         )
         row.chunks += 1
+        row.sections += 1 if c.part in (None, 1) else 0
     for path in PROCESSED.glob("*.jsonl"):
         if path.name == "all_documents.jsonl" or path.stem not in rows:
             continue
@@ -279,7 +283,22 @@ def list_documents() -> list[DocumentRow]:
 
 
 def records_for(document_id: str) -> list[SectionRecord]:
+    from app.ingestion.dataset_indexer import dataset_step_of
     from app.ingestion.jsonl_loader import read_jsonl
 
     path = PROCESSED / f"{document_id}.jsonl"
-    return read_jsonl(path) if path.exists() else []
+    if path.exists():
+        return read_jsonl(path)
+    step = dataset_step_of(document_id)  # built-in dataset documents live in one file per step
+    if step is None or not (PROCESSED / f"{step}.jsonl").exists():
+        return []
+    import json
+
+    out: list[SectionRecord] = []
+    with (PROCESSED / f"{step}.jsonl").open(encoding="utf-8") as fh:
+        for line in fh:
+            if f'"document_id": "{document_id}"' in line:
+                raw = json.loads(line)
+                if raw.get("document_id") == document_id:
+                    out.append(SectionRecord(**raw))
+    return out

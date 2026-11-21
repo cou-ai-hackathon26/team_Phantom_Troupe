@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Product
 
-AdhikarAI (অধিকারAI) is a hackathon project for the CoU AI Hackathon 2026 by team Phantom Troupe. The final demo is on 24 Nov 2026. It is a voice-first Bangla assistant for legal and public-service questions in four areas:
+AdhikarAI (অধিকারAI) is a hackathon project for the CoU AI Hackathon 2026 by team Phantom Troupe. The final demo is on 24 Nov 2026. It is a voice-first Bangla assistant for legal and public-service questions in five areas:
 
 | area code   | covers                                   |
 |-------------|------------------------------------------|
@@ -12,6 +12,7 @@ AdhikarAI (অধিকারAI) is a hackathon project for the CoU AI Hackathon
 | `gd`        | police General Diary (citizen charter)   |
 | `allowance` | old-age, widow/deserted-women and disability allowances (DSS) |
 | `labour`    | workers' rights (Bangladesh Labour Act 2006 and amendments) |
+| `general`   | every other Bangladesh law (Chronological Index of bdlaws, NHRC, other DSS acts); added 21 Nov for the full DataSet |
 
 Users type or speak standard Bangla, one regional dialect, Banglish or English. Answers are text with citations. There is no text-to-speech.
 

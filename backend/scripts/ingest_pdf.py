@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pymupdf  # noqa: E402
 
 from app.core.config import DATA_DIR  # noqa: E402
+from app.core.constants import AREAS  # noqa: E402
 from app.ingestion import bdlaws_parser, generic_parser  # noqa: E402
 from app.ingestion.area_map import DocumentSpec  # noqa: E402
 from app.ingestion.jsonl_loader import rebuild_all_documents, write_jsonl  # noqa: E402
@@ -45,7 +46,7 @@ def is_bdlaws(pdf: Path) -> bool:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("path", type=Path, help="a PDF file or a folder of PDFs")
-    ap.add_argument("--area", required=True, choices=["land", "gd", "allowance", "labour"])
+    ap.add_argument("--area", required=True, choices=list(AREAS))
     ap.add_argument("--title", required=True, help="official document title (Bangla)")
     ap.add_argument("--issuer", default="", help="issuing authority (verified)")
     ap.add_argument("--source-url", default=None, help="official URL (verified)")

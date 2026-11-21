@@ -233,7 +233,7 @@ function Dashboard({
         </p>
       )}
 
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {AREAS.map((a) => {
           const Icon = a.icon;
           const n = totals.byArea[a.id] ?? 0;

@@ -20,7 +20,7 @@ export function AreaCards({ onAsk, disabled }: AreaCardsProps) {
         {AREAS.map((area) => {
           const Icon = area.icon;
           return (
-            <li key={area.id} className="rounded-xl border bg-card p-4">
+            <li key={area.id} className="rounded-xl border bg-card p-4 sm:last:odd:col-span-2">
               <div className="flex items-start gap-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
                   <Icon className="size-5" aria-hidden />

@@ -8,6 +8,7 @@ One record per page keeps citations page-precise; the chunker splits long pages 
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -27,6 +28,28 @@ logger = logging.getLogger(__name__)
 PageKind = Literal["text", "legacy", "scanned"]
 MIN_TEXT_CHARS = 25
 TITLE_MAX = 90
+MIN_OCR_QUALITY = 0.5  # share of tokens that look like real words; below this an OCR page is noise
+
+_BN_LETTER = re.compile(r"[\u0985-\u09B9\u09CE\u09DC-\u09DF]")
+_EN_WORD = re.compile(r"^[A-Za-z][a-z]*[aeiouy][a-z]*$|^[A-Z]{2,}$", re.IGNORECASE)
+_NUMBER = re.compile(r"^[0-9০-৯][0-9০-৯.,/:%-]*$")
+
+
+def ocr_quality(text: str) -> float:
+    """Length-weighted share of characters in plausible words (0..1); numbers are ignored.
+
+    Tables and stamps scanned at low quality come out as 'esi em SS dou} a shee' — mostly 1-3 letter
+    fragments — which scores low; real Bangla or English prose is dominated by longer words and scores high.
+    """
+    good = total = 0
+    for raw in text.split():
+        t = raw.strip(".,;:!?()[]'\"“”‘’।|-–—")
+        if not t or _NUMBER.match(t):
+            continue
+        total += len(t)
+        if len(_BN_LETTER.findall(t)) >= 2 or (len(t) >= 3 and _EN_WORD.match(t)):
+            good += len(t)
+    return good / total if total else 0.0
 
 
 def classify_page(text: str, has_images: bool) -> PageKind:
@@ -58,7 +81,8 @@ class ParsedPdf:
         return any(r.needs_review for r in self.reports)
 
 
-def parse_generic_pdf(path: str | Path, ocr: PageOcrRunner | None = None) -> ParsedPdf:
+def parse_generic_pdf(path: str | Path, ocr: PageOcrRunner | None = None, drop_garbage: bool = False) -> ParsedPdf:
+    """drop_garbage: discard OCR pages whose ocr_quality() is below MIN_OCR_QUALITY (bulk ingestion)."""
     out = ParsedPdf()
     with pymupdf.open(path) as doc:
         for page in doc:
@@ -87,6 +111,13 @@ def parse_generic_pdf(path: str | Path, ocr: PageOcrRunner | None = None) -> Par
                         report.method = report.method if report.method == "bijoy" else "skipped"
                         text = text if report.method == "bijoy" else ""
             text = normalize_text(repair_bangla(text))
+            if (
+                drop_garbage
+                and report.method not in ("pymupdf", "bijoy")
+                and text
+                and ocr_quality(text) < MIN_OCR_QUALITY
+            ):
+                report.method, report.needs_review, text = f"{report.method}+dropped", True, ""
             report.chars = len(text)
             out.reports.append(report)
             if text:

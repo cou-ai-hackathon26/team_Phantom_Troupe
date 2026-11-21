@@ -9,7 +9,7 @@ class NormalizeOutput(BaseModel):
     """Call 1: rewrite + classify."""
 
     standard_bangla: str = Field(min_length=1)
-    area: Literal["land", "gd", "allowance", "labour", "unknown"] = "unknown"
+    area: Literal["land", "gd", "allowance", "labour", "general", "unknown"] = "unknown"
     in_scope: bool = True
     needs_clarification: bool = False
     clarification_question: str | None = None

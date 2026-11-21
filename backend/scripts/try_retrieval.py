@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.core.constants import AREAS  # noqa: E402
 from app.services.retrieval_service import get_retriever  # noqa: E402
 
 
@@ -21,7 +22,7 @@ def _fmt(value: float | int | None, spec: str) -> str:
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("question")
-    parser.add_argument("--area", choices=["land", "gd", "allowance", "labour"])
+    parser.add_argument("--area", choices=list(AREAS))
     parser.add_argument("--mode", default="hybrid", choices=["hybrid", "dense", "bm25"])
     args = parser.parse_args()
 

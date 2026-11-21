@@ -6,7 +6,8 @@ REFUSAL_TEXT = "দুঃখিত, এই প্রশ্নের উত্ত
 
 RATE_LIMIT_TEXT = "কিছুক্ষণ পর আবার চেষ্টা করুন।"
 
-Area = Literal["land", "gd", "allowance", "labour"]
-AREAS: tuple[str, ...] = ("land", "gd", "allowance", "labour")
+# "general" = every other Bangladesh law (Chronological Index, NHRC, …); added for the full DataSet.
+Area = Literal["land", "gd", "allowance", "labour", "general"]
+AREAS: tuple[str, ...] = ("land", "gd", "allowance", "labour", "general")
 
 Status = Literal["answered", "partial", "refused", "clarify"]

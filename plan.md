@@ -251,6 +251,20 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [ ] Set a long random `APP_SECRET_KEY` in `.env` so sessions survive API restarts (team)
 - [ ] Change the first admin's password after the hackathon (`scripts/create_admin.py <email>`)
 
+## Phase 11 — Full DataSet ingestion (added 21 Nov, team request)
+
+Goal: wipe the old 56 chunks and rebuild every store from `data/DataSet/` (8 folders, 709 PDFs, scraped `.md` guides, and a SQLite file with 1,668 acts / 49,791 sections), one source at a time, checking each step.
+
+Survey (21 Nov): 679 unique PDFs (29 byte-identical duplicates, skipped). Pages by kind: about 2,700 text, about 550 legacy-font, about 1,310 scanned (Tesseract runs at 1–2 s per page). The Chronological Index SQLite is cleaner than its JSONL (1,484 acts / 35,633 sections), so it is the source used. Its per-era `.md` files duplicate the SQLite and are skipped, and so are `act-*.html`, the index `.csv`/`.json` and `search_laws.py`.
+
+- [x] 11.1 New area `general` (other Bangladesh laws, NHRC) in constants, the LLM schema, `normalize.md`, frontend types and area cards, and CLAUDE.md
+- [x] 11.2 Tooling: `app/ingestion/dataset_sources.py` (step manifest, sha256 dedupe), `markdown_parser.py`, `sqlite_laws.py` (keyword area mapping, skips act-952/1672, which come from the PDFs), incremental per-document indexing (embed only new chunks, per-document Qdrant/Postgres replace, batched inserts, per-document chunk cache, BM25 rebuilt from the cache), an OCR garbage filter, an O(n) duplicate-id check, `scripts/ingest_dataset.py --list | --wipe | --step <name>`, and tests. Also fixed: the bdlaws parser read only 23 of the 369 PDFs re-printed in the 2026 layout (left-aligned title block, margin titles glued to the body, no chapter in amendment acts), and now reads 368 sections plus the preamble; the Amendment Act reads 93 sections (inserted sections stay in their amending section); exact "ধারা N" matching is limited to the named or retrieved act; "শ্রম আইন ২০০৬ ধারা ৪" no longer reads 2006 as a section
+- [ ] 11.3 Wipe: Qdrant collection recreated, `chunks`/`documents`/`answer_cache` emptied, processed JSONL, registry and BM25 cleared
+- [ ] 11.4 Ingest step by step, checking counts in all three stores plus one sample retrieval after each: labour-2006 → labour-2026 → online-gd → police → nhrc → land (6 subfolders) → dss (8 subfolders) → md guides → chronological index (5 eras)
+- [ ] 11.5 Tests, eval rerun, warmup, README credits and data status, commit
+
+Risk: Supabase free tier is 500 MB. Watch `pg_database_size` after every step and stop before about 430 MB (fallback: keep the chronological corpus in Qdrant + BM25 only).
+
 ---
 
 ## Risks and mitigations

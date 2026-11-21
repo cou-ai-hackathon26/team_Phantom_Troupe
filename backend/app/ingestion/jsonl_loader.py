@@ -41,8 +41,8 @@ def read_jsonl(path: Path) -> list[SectionRecord]:
                 records.append(_coerce(json.loads(line)))
             except Exception as exc:
                 raise ValueError(f"{path.name}:{line_no}: {exc}") from exc
-    ids = [r.id for r in records]
-    dupes = {i for i in ids if ids.count(i) > 1}
+    seen: set[str] = set()
+    dupes = {r.id for r in records if r.id in seen or seen.add(r.id)}
     if dupes:
         raise ValueError(f"duplicate record ids in {path.name}: {sorted(dupes)[:5]}")
     return records

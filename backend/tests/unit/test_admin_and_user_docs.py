@@ -1,6 +1,7 @@
 """Admin knowledge management and personal documents. External services are faked; inputs are synthetic."""
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from app.core.config import settings
-from app.ingestion import source_registry
+from app.ingestion import dataset_indexer, source_registry
 from app.main import app
 from app.models.llm_client import LLMResult
 from app.repositories.bm25_repository import BM25Index
@@ -91,6 +92,25 @@ def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "bm25_path", tmp_path / "bm25.pkl")
     monkeypatch.setattr(ka, "get_answer_cache", lambda: MemoryCache())
     monkeypatch.setattr("app.ingestion.indexer.document_specs", lambda: source_registry.load_registry())
+    # the Labour Act is a built-in DataSet document: protected from upload-overwrite and delete
+    builtin = tmp_path / "dataset_registry.json"
+    builtin.write_text(
+        json.dumps(
+            {
+                "labour-2006": [
+                    {
+                        "document_id": "labour-act-2006",
+                        "area": "labour",
+                        "title": "t",
+                        "issuer": "i",
+                        "parser": "bdlaws",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dataset_indexer, "DATASET_REGISTRY", builtin)
     (tmp_path / "processed").mkdir()
     FakeQdrant.instances.clear()
     return retriever, tmp_path
