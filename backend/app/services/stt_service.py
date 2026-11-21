@@ -1,6 +1,7 @@
-"""Groq Whisper fallback speech-to-text (browser bn-BD recognition is the default path).
+"""Groq Whisper fallback speech-to-text (browser speech recognition is the default path).
 
-ffmpeg -> 16 kHz mono WAV -> whisper (language "bn", temperature 0, domain-word prompt).
+ffmpeg -> 16 kHz mono WAV -> whisper (language "bn" or "en" as chosen in the UI, temperature 0;
+the Bangla domain-word prompt only for "bn", where it helps spelling and would bias English).
 The transcript then goes through the normal Call 1 normalization like typed text.
 """
 
@@ -48,7 +49,10 @@ def suffix_for(content_type: str | None, filename: str | None) -> str:
     return ".webm"
 
 
-async def _whisper(wav_bytes: bytes) -> str:
+STT_LANGUAGES = ("bn", "en")
+
+
+async def _whisper(wav_bytes: bytes, language: str = "bn") -> str:
     client = get_raw_groq_client()
     attempt = 0
     while True:
@@ -56,9 +60,9 @@ async def _whisper(wav_bytes: bytes) -> str:
             result = await client.audio.transcriptions.create(
                 file=("audio.wav", wav_bytes),
                 model=settings.stt_model,
-                language="bn",
+                language=language,
                 temperature=0,
-                prompt=DOMAIN_WORDS,
+                prompt=DOMAIN_WORDS if language == "bn" else None,
                 response_format="json",
             )
             return (result.text or "").strip()
@@ -73,12 +77,15 @@ async def _whisper(wav_bytes: bytes) -> str:
             raise LLMError(f"Whisper error {exc.status_code}") from exc
 
 
-async def transcribe(data: bytes, content_type: str | None = None, filename: str | None = None) -> str:
+async def transcribe(
+    data: bytes, content_type: str | None = None, filename: str | None = None, language: str = "bn"
+) -> str:
+    language = language if language in STT_LANGUAGES else "bn"
     start = time.perf_counter()
     async with wav_16k_mono(data, suffix_for(content_type, filename)) as wav:
         wav_bytes = wav.read_bytes()
     # temp files are already deleted here; only the in-memory WAV goes to Whisper
-    text = (await _whisper(wav_bytes)).strip()
+    text = (await _whisper(wav_bytes, language)).strip()
     if is_prompt_echo(text):
         logger.info("stt prompt echo discarded")
         text = ""

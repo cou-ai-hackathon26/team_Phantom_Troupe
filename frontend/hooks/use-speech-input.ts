@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, transcribeAudio } from "@/lib/api";
+import { ApiError, transcribeAudio, type VoiceLang } from "@/lib/api";
 
 // Minimal Web Speech API types (not in TypeScript's DOM lib everywhere).
 interface SpeechRecognitionAlternativeLike {
@@ -36,6 +36,10 @@ export type MicMode = "speech" | "recorder" | "none";
 export type MicState = "idle" | "listening" | "recording" | "transcribing";
 
 const MAX_RECORD_MS = 30_000;
+const LANG_KEY = "adhikarai.voiceLang";
+// Browser recognizers write everything in the chosen language's script, so English speech under bn-BD
+// comes out as Bangla-script phonetics: the user picks the language they will speak.
+const BROWSER_LANG: Record<VoiceLang, string> = { bn: "bn-BD", en: "en-US" };
 
 const SPEECH_ERRORS: Record<string, string> = {
   "not-allowed": "মাইক্রোফোন ব্যবহারের অনুমতি দেওয়া হয়নি। ব্রাউজারের ঠিকানা-বারের পাশে অনুমতি দিন, অথবা প্রশ্নটি লিখুন।",
@@ -60,7 +64,8 @@ function pickMimeType(): string | undefined {
 }
 
 /**
- * Voice input: browser bn-BD speech recognition first; MediaRecorder + backend Whisper as fallback.
+ * Voice input: browser speech recognition first (bn-BD or en-US, as chosen); MediaRecorder + backend
+ * Whisper (same language) as fallback.
  * The final text is handed to `onFinal` — the caller puts it in the input box. Nothing auto-sends.
  */
 export function useSpeechInput(onFinal: (text: string) => void) {
@@ -69,6 +74,8 @@ export function useSpeechInput(onFinal: (text: string) => void) {
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [lang, setLangState] = useState<VoiceLang>("bn");
+  const langRef = useRef<VoiceLang>("bn");
 
   const recognition = useRef<SpeechRecognitionLike | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -76,6 +83,28 @@ export function useSpeechInput(onFinal: (text: string) => void) {
   const finalText = useRef("");
   const onFinalRef = useRef(onFinal);
   onFinalRef.current = onFinal;
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(LANG_KEY);
+      if (saved === "bn" || saved === "en") {
+        langRef.current = saved;
+        setLangState(saved);
+      }
+    } catch {
+      /* storage blocked: default to Bangla */
+    }
+  }, []);
+
+  const setLang = useCallback((next: VoiceLang) => {
+    langRef.current = next;
+    setLangState(next);
+    try {
+      window.localStorage.setItem(LANG_KEY, next);
+    } catch {
+      /* storage blocked: choice lasts for this visit */
+    }
+  }, []);
 
   useEffect(() => {
     if (getSpeechCtor()) setMode("speech");
@@ -93,7 +122,7 @@ export function useSpeechInput(onFinal: (text: string) => void) {
     const Ctor = getSpeechCtor();
     if (!Ctor) return;
     const rec = new Ctor();
-    rec.lang = "bn-BD";
+    rec.lang = BROWSER_LANG[langRef.current];
     rec.interimResults = true;
     rec.continuous = false; // one question
     rec.maxAlternatives = 1;
@@ -148,7 +177,7 @@ export function useSpeechInput(onFinal: (text: string) => void) {
       }
       setState("transcribing");
       try {
-        const { transcript } = await transcribeAudio(blob);
+        const { transcript } = await transcribeAudio(blob, langRef.current);
         onFinalRef.current(transcript);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "কথা বোঝা যায়নি। আবার বলুন অথবা প্রশ্নটি লিখুন।");
@@ -185,5 +214,17 @@ export function useSpeechInput(onFinal: (text: string) => void) {
     [],
   );
 
-  return { mode, state, interim, error, elapsed, maxSeconds: MAX_RECORD_MS / 1000, start, stop, clearError: () => setError(null) };
+  return {
+    mode,
+    state,
+    interim,
+    error,
+    elapsed,
+    maxSeconds: MAX_RECORD_MS / 1000,
+    lang,
+    setLang,
+    start,
+    stop,
+    clearError: () => setError(null),
+  };
 }

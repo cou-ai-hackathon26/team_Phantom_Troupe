@@ -64,7 +64,7 @@ def test_suffix_detection() -> None:
 def test_transcribe_endpoint_with_mocked_whisper(monkeypatch) -> None:
     seen: dict[str, int] = {}
 
-    async def fake_whisper(wav_bytes: bytes) -> str:
+    async def fake_whisper(wav_bytes: bytes, language: str = "bn") -> str:
         seen["bytes"] = len(wav_bytes)
         return "  লে-অফ হলে কী পাব?  "
 
@@ -76,7 +76,7 @@ def test_transcribe_endpoint_with_mocked_whisper(monkeypatch) -> None:
 
 
 def test_empty_transcript_is_422_in_bangla(monkeypatch) -> None:
-    async def fake_whisper(wav_bytes: bytes) -> str:
+    async def fake_whisper(wav_bytes: bytes, language: str = "bn") -> str:
         return ""
 
     monkeypatch.setattr(stt_service, "_whisper", fake_whisper)
@@ -107,9 +107,31 @@ def test_prompt_echo_detection() -> None:
 
 
 def test_prompt_echo_becomes_empty_transcript(monkeypatch) -> None:
-    async def fake_whisper(wav_bytes: bytes) -> str:
+    async def fake_whisper(wav_bytes: bytes, language: str = "bn") -> str:
         return "প্রতিবন্ধী ভাতা"
 
     monkeypatch.setattr(stt_service, "_whisper", fake_whisper)
     resp = TestClient(app).post("/api/v1/chat/voice/transcribe", files={"audio": ("r.wav", tone_wav(), "audio/wav")})
     assert resp.status_code == 422 and resp.json()["detail"]["code"] == "empty_transcript"
+
+
+def test_transcribe_passes_chosen_language(monkeypatch) -> None:
+    seen: list[str] = []
+
+    async def fake_whisper(wav_bytes: bytes, language: str = "bn") -> str:
+        seen.append(language)
+        return "sample words"
+
+    monkeypatch.setattr(stt_service, "_whisper", fake_whisper)
+    client = TestClient(app)
+    files = {"audio": ("rec.wav", tone_wav(), "audio/wav")}
+    assert client.post("/api/v1/chat/voice/transcribe", files=files, data={"language": "en"}).status_code == 200
+    assert (
+        client.post("/api/v1/chat/voice/transcribe", files={"audio": ("rec.wav", tone_wav(), "audio/wav")}).status_code
+        == 200
+    )
+    assert seen == ["en", "bn"]  # default stays Bangla
+    bad = client.post(
+        "/api/v1/chat/voice/transcribe", files={"audio": ("r.wav", tone_wav(), "audio/wav")}, data={"language": "fr"}
+    )
+    assert bad.status_code == 422

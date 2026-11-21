@@ -2,6 +2,7 @@
 
 import { LoaderCircle, Mic, Square } from "lucide-react";
 import type { MicState } from "@/hooks/use-speech-input";
+import type { VoiceLang } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface MicButtonProps {
@@ -41,5 +42,41 @@ export function MicButton({ state, onStart, onStop, disabled }: MicButtonProps) 
         <Mic className="size-6" aria-hidden />
       )}
     </button>
+  );
+}
+
+interface VoiceLangToggleProps {
+  lang: VoiceLang;
+  onChange: (lang: VoiceLang) => void;
+  disabled?: boolean;
+}
+
+const LANG_OPTIONS: { id: VoiceLang; label: string; name: string }[] = [
+  { id: "bn", label: "বাং", name: "বাংলায় বলব" },
+  { id: "en", label: "EN", name: "ইংরেজিতে বলব" },
+];
+
+/** Which language the user will speak: the recognizer writes in that language's script. */
+export function VoiceLangToggle({ lang, onChange, disabled }: VoiceLangToggleProps) {
+  return (
+    <div role="radiogroup" aria-label="কোন ভাষায় বলবেন" className="flex rounded-full border bg-card p-0.5 text-xs">
+      {LANG_OPTIONS.map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          role="radio"
+          aria-checked={lang === opt.id}
+          aria-label={opt.name}
+          disabled={disabled}
+          onClick={() => onChange(opt.id)}
+          className={cn(
+            "rounded-full px-2 py-0.5 leading-tight transition-colors disabled:opacity-60",
+            lang === opt.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
   );
 }

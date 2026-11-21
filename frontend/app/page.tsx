@@ -6,7 +6,7 @@ import { AnswerError, AnswerSkeleton, UserBubble } from "@/components/chat/answe
 import { AreaCards } from "@/components/chat/area-cards";
 import { CitationSheet, type SourceView } from "@/components/chat/citation-sheet";
 import { Composer } from "@/components/chat/composer";
-import { MicButton } from "@/components/chat/mic-button";
+import { MicButton, VoiceLangToggle } from "@/components/chat/mic-button";
 import { AttachButton, PersonalDocChip } from "@/components/chat/personal-doc";
 import { useSpeechInput } from "@/hooks/use-speech-input";
 import { toBnDigits } from "@/lib/bn";
@@ -174,7 +174,12 @@ export default function ChatPage() {
           onChange={setInput}
           onSubmit={() => ask(input)}
           busy={busy}
-          mic={<MicButton state={voice.state} onStart={startVoice} onStop={voice.stop} disabled={busy} />}
+          mic={
+            <div className="flex shrink-0 flex-col items-center gap-1">
+              <MicButton state={voice.state} onStart={startVoice} onStop={voice.stop} disabled={busy} />
+              <VoiceLangToggle lang={voice.lang} onChange={voice.setLang} disabled={voice.state !== "idle"} />
+            </div>
+          }
           attach={<AttachButton onPick={(f) => void attachDoc(f)} busy={docUploading !== null} disabled={busy} />}
           top={
             <PersonalDocChip

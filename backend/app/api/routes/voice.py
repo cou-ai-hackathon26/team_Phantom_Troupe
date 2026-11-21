@@ -1,6 +1,8 @@
 """Voice fallback endpoints (browsers without bn-BD speech recognition, e.g. Firefox)."""
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from typing import Literal
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.api.dependencies import http_error, orchestrator_dep
@@ -24,10 +26,13 @@ class VoiceChatResponse(ChatResponse):
     transcript: str
 
 
-async def _read_and_transcribe(audio: UploadFile) -> str:
+Language = Literal["bn", "en"]
+
+
+async def _read_and_transcribe(audio: UploadFile, language: str = "bn") -> str:
     data = await audio.read(MAX_AUDIO_BYTES + 1)
     try:
-        transcript = await stt_service.transcribe(data, audio.content_type, audio.filename)
+        transcript = await stt_service.transcribe(data, audio.content_type, audio.filename, language)
     except AudioError as exc:
         raise HTTPException(422, detail={"code": "bad_audio", "message": str(exc)}) from exc
     except LLMRateLimited as exc:
@@ -42,17 +47,19 @@ async def _read_and_transcribe(audio: UploadFile) -> str:
 
 
 @router.post("/transcribe", response_model=TranscriptResponse)
-async def transcribe(audio: UploadFile = File(...)) -> TranscriptResponse:
+async def transcribe(audio: UploadFile = File(...), language: Language = Form("bn")) -> TranscriptResponse:
     """Transcribe only — the UI puts the text in the input box for the user to check before sending."""
-    return TranscriptResponse(transcript=await _read_and_transcribe(audio))
+    return TranscriptResponse(transcript=await _read_and_transcribe(audio, language))
 
 
 @router.post("", response_model=VoiceChatResponse)
 async def chat_voice(
-    audio: UploadFile = File(...), orchestrator: Orchestrator = Depends(orchestrator_dep)
+    audio: UploadFile = File(...),
+    language: Language = Form("bn"),
+    orchestrator: Orchestrator = Depends(orchestrator_dep),
 ) -> VoiceChatResponse:
     """Transcribe and answer in one call (docs/pipeline.md 13.4a)."""
-    transcript = await _read_and_transcribe(audio)
+    transcript = await _read_and_transcribe(audio, language)
     try:
         result = await orchestrator.run(ChatRequest(message=transcript[:2000]))
     except LLMRateLimited as exc:

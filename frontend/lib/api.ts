@@ -74,10 +74,13 @@ export const sendFeedback = (queryLogId: string | null, rating: "up" | "down") =
     body: JSON.stringify({ query_log_id: queryLogId, rating }),
   });
 
-export function transcribeAudio(blob: Blob) {
+export type VoiceLang = "bn" | "en";
+
+export function transcribeAudio(blob: Blob, language: VoiceLang = "bn") {
   const form = new FormData();
   const ext = blob.type.includes("mp4") ? "mp4" : blob.type.includes("ogg") ? "ogg" : "webm";
   form.append("audio", blob, `question.${ext}`);
+  form.append("language", language);
   return request<{ transcript: string }>("/chat/voice/transcribe", { method: "POST", body: form });
 }
 
