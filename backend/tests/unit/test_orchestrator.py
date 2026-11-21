@@ -254,3 +254,64 @@ def test_number_words_in_source_support_digits_in_answer() -> None:
     assert v.status == "answered" and not v.warnings
     v2 = validate_answer(AnswerOutput(answer="৯ কিমি [C1]", used_chunk_ids=["C1"], found=True), {"C1": chunk})
     assert v2.status == "partial"
+
+
+# ---------------------------------------------------------------- search_query and area fallback
+
+
+class RecordingEmbedder(FakeEmbedder):
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def embed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        return [0.0]
+
+
+class AreaQdrant(FakeQdrant):
+    """Returns hits only for unfiltered searches, like a document filed under another area."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.areas: list[str | None] = []
+
+    async def search(self, vector: Any, top_k: int, area: str | None = None) -> list[DenseHit]:
+        self.areas.append(area)
+        return [] if area == "gd" else [DenseHit("t-s1", 0.9, 1)]
+
+
+def test_retrieval_uses_search_query_and_also_searches_all_areas() -> None:
+    embedder, qdrant = RecordingEmbedder(), AreaQdrant()
+    retriever = Retriever(BM25Index.build(CHUNKS), qdrant, embedder)  # type: ignore[arg-type]
+    norm = NormalizeOutput(
+        standard_bangla="আমি কি আলফা পাব?", search_query="আলফা পাওয়ার যোগ্যতা ও শর্ত", area="gd", in_scope=True
+    )
+    llm = FakeLLM(norm, AnswerOutput(answer="আলফা নিয়ম [C1]", used_chunk_ids=["C1"], found=True))
+    resp = asyncio.run(Orchestrator(retriever, llm, MemoryCache()).run(ChatRequest(message="ami ki alfa pabo?")))  # type: ignore[arg-type]
+    assert embedder.queries == ["আলফা পাওয়ার যোগ্যতা ও শর্ত"] * 2  # area search + all-areas search
+    assert qdrant.areas == ["gd", None]
+    assert resp.status == "answered"  # found through the all-areas search despite the wrong area guess
+    assert len(llm.calls) == 2
+
+
+def test_user_chosen_area_is_not_widened() -> None:
+    qdrant = AreaQdrant()
+    retriever = Retriever(BM25Index.build(CHUNKS), qdrant, FakeEmbedder())  # type: ignore[arg-type]
+    llm = FakeLLM(IN_SCOPE, AnswerOutput(answer="আলফা [C1]", used_chunk_ids=["C1"], found=True))
+    asyncio.run(Orchestrator(retriever, llm, MemoryCache()).run(ChatRequest(message="আলফা?", area="labour")))  # type: ignore[arg-type]
+    assert qdrant.areas == ["labour"]
+
+
+def test_merge_results_fuses_and_prefers_area_on_ties() -> None:
+    from app.services.fusion_service import FusedCandidate
+    from app.services.retrieval_service import RetrievalResult, merge_results
+
+    def result(ids: list[str]) -> RetrievalResult:
+        return RetrievalResult("q", None, [FusedCandidate(i, 0.0) for i in ids], {})
+
+    merged = merge_results(result(["a", "b"]), result(["c", "a"]), top_n=3)
+    assert [c.chunk_id for c in merged.candidates] == [
+        "a",
+        "c",
+        "b",
+    ]  # a is in both lists; c (1st in wide) outranks b (2nd in area)

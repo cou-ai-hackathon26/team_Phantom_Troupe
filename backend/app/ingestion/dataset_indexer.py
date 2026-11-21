@@ -163,6 +163,16 @@ async def _with_retry(call, attempts: int = QDRANT_RETRIES) -> None:  # noqa: AN
             await asyncio.sleep(wait)
 
 
+async def _clear_answer_cache() -> None:
+    from sqlalchemy import text
+
+    from app.db.session import get_sessionmaker
+
+    async with get_sessionmaker()() as session:
+        await session.execute(text("delete from answer_cache"))
+        await session.commit()
+
+
 async def replace_in_postgres(
     document_ids: Sequence[str],
     specs: Sequence[DocumentSpec],
@@ -279,6 +289,7 @@ async def _index_step_locked(
         for r in records:
             source_files.setdefault(r.document_id, r.source_file)
         n_pg = await replace_in_postgres(replaced, specs, chunks, source_files)
+        await _clear_answer_cache()  # answers (and refusals) were computed against the old knowledge
 
     # only after Qdrant and Postgres succeeded: a failed step stays pending and its old cache stays valid
     save_step(step, specs, records)

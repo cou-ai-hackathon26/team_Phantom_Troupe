@@ -9,6 +9,7 @@ refusal before Call 2 (the answer may be in the user's document), and nothing ab
 import time
 from dataclasses import dataclass, field
 
+from app.core.config import settings
 from app.core.constants import REFUSAL_TEXT
 from app.models.llm_client import LLMBadOutput, LLMClient
 from app.schemas.chat import ChatRequest, ChatResponse, Trace, TraceCandidate
@@ -17,7 +18,7 @@ from app.services.citation_validator import validate_answer
 from app.services.generation_service import generate_answer, label_chunks, label_user_passages
 from app.services.query_log import record_query
 from app.services.query_normalizer import normalize_query
-from app.services.retrieval_service import RetrievalResult, Retriever
+from app.services.retrieval_service import RetrievalResult, Retriever, merge_results
 from app.services.trust_policy import pre_retrieval_gate, retrieval_gate
 from app.services.user_docs import UserDocStore, get_user_doc_store
 
@@ -31,6 +32,7 @@ class _Run:
     gate: str = ""
     retrieval: RetrievalResult | None = None
     normalized: str = ""
+    search: str = ""  # Call 1's search_query: what retrieval looks for
     area: str | None = None
     warnings: list[str] = field(default_factory=list)
     private: bool = False
@@ -57,6 +59,7 @@ class Orchestrator:
         query = await normalize_query(self.llm, request.message)
         run.llm_calls += 1
         run.normalized = query.standard_bangla
+        run.search = query.search_query or query.standard_bangla
         run.area = request.area or query.area
 
         gate = pre_retrieval_gate(query)
@@ -72,10 +75,12 @@ class Orchestrator:
             return await self._from_cache(hit, request, run)
 
         # ---- retrieval + score gate
-        run.retrieval = await self.retriever.retrieve(run.normalized, area=run.area)
-        if not run.retrieval.candidates and run.area and not request.area:
-            # classified area has no documents (or a wrong guess): search every area instead
-            run.retrieval = await self.retriever.retrieve(run.normalized, area=None)
+        run.retrieval = await self.retriever.retrieve(run.search, area=run.area)
+        if run.area and not request.area:
+            # the area is Call 1's guess: also search every area and fuse, so a wrong guess
+            # (e.g. a lost NID classified as "general") cannot hide the right documents
+            wide = await self.retriever.retrieve(run.search, area=None)
+            run.retrieval = merge_results(run.retrieval, wide, top_n=settings.fused_top_k, k=settings.rrf_k)
         gate = retrieval_gate(run.retrieval)
         if gate.decision == "refuse" and not run.private:
             return await self._finish(
@@ -88,7 +93,7 @@ class Orchestrator:
             # official passages only if the score gate passed; the user's passages always go in
             official = official[:OFFICIAL_CHUNKS_WITH_USER_DOC] if gate.decision == "continue" else []
             labelled: dict = label_chunks(official)
-            labelled.update(label_user_passages(user_doc.id, user_doc.filename, user_doc.select(run.normalized)))
+            labelled.update(label_user_passages(user_doc.id, user_doc.filename, user_doc.select(run.search)))
         else:
             labelled = label_chunks(official)
         try:

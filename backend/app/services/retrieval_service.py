@@ -192,6 +192,25 @@ class Retriever:
         )
 
 
+def merge_results(primary: RetrievalResult, wide: RetrievalResult, top_n: int, k: int = 60) -> RetrievalResult:
+    """RRF over two fused rankings (classified area first, then all areas). Ties favour the area's ranking."""
+    by_id: dict[str, FusedCandidate] = {}
+    score: dict[str, float] = {}
+    for result in (primary, wide):
+        for rank, cand in enumerate(result.candidates, start=1):
+            by_id.setdefault(cand.chunk_id, cand)
+            score[cand.chunk_id] = score.get(cand.chunk_id, 0.0) + 1.0 / (k + rank)
+    order = sorted(by_id, key=lambda cid: -score[cid])  # stable: primary's order wins ties
+    return RetrievalResult(
+        query=primary.query,
+        area=primary.area,
+        candidates=[by_id[cid] for cid in order[:top_n]],
+        chunks=primary.chunks,
+        dense=[*primary.dense, *wide.dense],
+        sparse=[*primary.sparse, *wide.sparse],
+    )
+
+
 @lru_cache
 def get_retriever() -> Retriever:
     """Loads the BM25 pickle once per process (call at startup)."""

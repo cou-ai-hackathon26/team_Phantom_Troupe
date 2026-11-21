@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class NormalizedQuery:
     original: str
     standard_bangla: str
+    search_query: str  # what retrieval searches (eligibility/conditions wording, official terms)
     area: str | None  # None = search all areas
     in_scope: bool
     needs_clarification: bool
@@ -27,17 +28,19 @@ async def normalize_query(llm: LLMClient, message: str) -> NormalizedQuery:
     message = normalize_text(message)
     try:
         result = await llm.complete_json(
-            load_prompt("normalize"), message, NormalizeOutput, temperature=0.0, max_tokens=400, purpose="normalize"
+            load_prompt("normalize"), message, NormalizeOutput, temperature=0.0, max_tokens=500, purpose="normalize"
         )
     except LLMBadOutput as exc:
         # Fallback (never block on Call 1): search all areas with the raw question; Call 2 + validation still guard.
         logger.warning("normalize fallback", extra={"data": {"error": str(exc)}})
-        return NormalizedQuery(message, message, None, True, False, None, llm_ok=False)
+        return NormalizedQuery(message, message, message, None, True, False, None, llm_ok=False)
     out = result.data
     clarify = out.needs_clarification and bool(out.clarification_question)
+    standard = normalize_text(out.standard_bangla) or message
     return NormalizedQuery(
         original=message,
-        standard_bangla=normalize_text(out.standard_bangla) or message,
+        standard_bangla=standard,
+        search_query=normalize_text(out.search_query) or standard,
         area=None if out.area == "unknown" else out.area,
         in_scope=out.in_scope,
         needs_clarification=clarify,
