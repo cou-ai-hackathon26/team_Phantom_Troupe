@@ -182,11 +182,12 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 
 ## Phase 7 — PDF, legacy font and local OCR (~4 h)
 
-- [ ] PyMuPDF page parser and page classifier (text, legacy font, scanned)
-- [ ] Bijoy → Unicode converter, post-fix rules and unit tests
-- [ ] OCR service (Tesseract, then a second engine when confidence is below the minimum, confidence per page, GPU freed before embedding)
-- [ ] `compare_ocr.py` and `ingest_pdf.py` (reusing the Phase 2 code)
-- [ ] Install Tesseract with `ben` (`sudo dnf install tesseract tesseract-langpack-ben`) and run it on real PDFs
+- [x] PyMuPDF page parser (Phase 2 row rebuild) and page classifier (text, legacy font, scanned). The classifier was tightened after a test showed plain English pages being taken for Bijoy.
+- [x] Bijoy → Unicode converter (longest-match table, pre-base vowel and reph reordering, NFC, post-fix rules) with known-pair tests (`eq¯‹fvZv` → `বয়স্কভাতা` and others). It reports unmapped glyphs; pages over 2% unmapped go to OCR or review. **The table is core-only; spot-check against a real legacy PDF.**
+- [x] OCR service (Tesseract `ben+eng`, then EasyOCR when confidence is below the minimum; engine and confidence per page; `needs_review`; `release()` frees the GPU before embedding). The Surya and PaddleOCR adapters are left unwired until `compare_ocr.py` shows one is worth it.
+- [x] `compare_ocr.py` and `ingest_pdf.py` (auto-detects bdlaws vs generic; preserves originals in `data/originals/<area>/` with sha256; `data/sources_log.csv` and `data/sources_registry.json`; reuses the Phase 2 pipeline via `app/ingestion/pipeline.py`)
+- [ ] Install Tesseract with `ben` (`sudo dnf install tesseract tesseract-langpack-ben`) and optionally `uv pip install easyocr`, then run `compare_ocr.py` on 3–5 real scanned pages (human task, needs sudo)
+- [ ] Ingest real land, GD and allowance PDFs with `ingest_pdf.py` (blocked: documents not supplied yet)
 
 **Done when:** a text PDF, a legacy-font PDF and a scanned page all ingest and are searchable.
 

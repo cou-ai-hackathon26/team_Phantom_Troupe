@@ -49,3 +49,8 @@ def test_clean_text_is_unchanged(clean: str) -> None:
 def test_detects_bijoy_gibberish() -> None:
     assert looks_like_legacy_bijoy("eq¯‹fvZv cÖ`vb Kiv n‡e Ges Avek¨K KvMRcÎ RgvμvšÍ Kiæb")
     assert not looks_like_legacy_bijoy("বয়স্কভাতা প্রদান করা হইবে এবং প্রয়োজনীয় কাগজপত্র জমা দিতে হইবে")
+    # plain English pages (common in government PDFs) must not be "converted"
+    assert not looks_like_legacy_bijoy(
+        "Section 1. The Government may, by notification in the official Gazette, make rules."
+    )
+    assert not looks_like_legacy_bijoy("Ministry of Law, Justice and Parliamentary Affairs — “Copyright” notice, 2019.")

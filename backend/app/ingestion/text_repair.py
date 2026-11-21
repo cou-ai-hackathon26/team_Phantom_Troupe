@@ -47,8 +47,11 @@ def repair_bangla(text: str) -> str:
     return text
 
 
-# Bijoy/SutonnyMJ text extracted without conversion is mostly Latin letters plus these symbols.
-_BIJOY_MARKERS = set("¯©‡ÖÕ†¨Ô–¨")
+# Bijoy/SutonnyMJ text extracted without conversion is Latin letters mixed with Latin-1 / typographic
+# symbols (¯ ‡ Ö ¨ Í ‹ © …) that ordinary English text never contains.
+def _is_legacy_marker(ch: str) -> bool:
+    # Latin-1/Extended glyph codes + dagger-like symbols; not —, “ ”, ‘ ’ which English uses too
+    return "\u00a1" <= ch <= "\u02ff" or ch in "†‡ˆ‰Š‹›ŒœŸ„μ"
 
 
 def looks_like_legacy_bijoy(text: str, min_chars: int = 40) -> bool:
@@ -56,6 +59,5 @@ def looks_like_legacy_bijoy(text: str, min_chars: int = 40) -> bool:
     if len(letters) < min_chars:
         return False
     bangla = sum(1 for c in letters if "\u0980" <= c <= "\u09ff")
-    markers = sum(1 for c in letters if c in _BIJOY_MARKERS)
-    latin = sum(1 for c in letters if c.isascii() and c.isalpha())
-    return bangla / len(letters) < 0.1 and (markers >= 3 or latin / len(letters) > 0.5)
+    markers = sum(1 for c in letters if _is_legacy_marker(c))
+    return bangla / len(letters) < 0.1 and markers / len(letters) >= 0.04

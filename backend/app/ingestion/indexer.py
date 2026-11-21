@@ -18,9 +18,11 @@ QDRANT_BATCH = 64
 
 def document_specs() -> dict[str, DocumentSpec]:
     from app.ingestion.area_map import JSONL_SOURCE_FILES
+    from app.ingestion.source_registry import load_registry
 
     specs = {s.document_id: s for s in PDF_FOLDERS.values()}
     specs.update({s.document_id: s for s in JSONL_SOURCE_FILES.values()})
+    specs.update(load_registry())
     return specs
 
 
