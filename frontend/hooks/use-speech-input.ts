@@ -1,0 +1,189 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError, transcribeAudio } from "@/lib/api";
+
+// Minimal Web Speech API types (not in TypeScript's DOM lib everywhere).
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  0: SpeechRecognitionAlternativeLike;
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+interface SpeechRecognitionErrorEventLike {
+  error: string;
+}
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  maxAlternatives: number;
+  onresult: ((e: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((e: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+export type MicMode = "speech" | "recorder" | "none";
+export type MicState = "idle" | "listening" | "recording" | "transcribing";
+
+const MAX_RECORD_MS = 30_000;
+
+const SPEECH_ERRORS: Record<string, string> = {
+  "not-allowed": "মাইক্রোফোন ব্যবহারের অনুমতি দেওয়া হয়নি। ব্রাউজারের ঠিকানা-বারের পাশে অনুমতি দিন, অথবা প্রশ্নটি লিখুন।",
+  "service-not-allowed": "এই ব্রাউজারে ভয়েস সেবা চালু নেই। প্রশ্নটি লিখুন।",
+  "no-speech": "কোনো কথা শোনা যায়নি। মাইকে চাপ দিয়ে আবার বলুন।",
+  "audio-capture": "মাইক্রোফোন পাওয়া যায়নি। মাইক্রোফোন যুক্ত আছে কি না দেখুন।",
+  network: "ভয়েস চিনতে ইন্টারনেট লাগে। সংযোগ দেখে আবার চেষ্টা করুন, অথবা প্রশ্নটি লিখুন।",
+};
+const UNSUPPORTED = "এই ব্রাউজারে ভয়েস ইনপুট নেই। Chrome ব্যবহার করুন, অথবা প্রশ্নটি লিখুন।";
+
+function getSpeechCtor(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+function pickMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"].find((t) =>
+    MediaRecorder.isTypeSupported(t),
+  );
+}
+
+/**
+ * Voice input: browser bn-BD speech recognition first; MediaRecorder + backend Whisper as fallback.
+ * The final text is handed to `onFinal` — the caller puts it in the input box. Nothing auto-sends.
+ */
+export function useSpeechInput(onFinal: (text: string) => void) {
+  const [mode, setMode] = useState<MicMode>("none");
+  const [state, setState] = useState<MicState>("idle");
+  const [interim, setInterim] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  const recognition = useRef<SpeechRecognitionLike | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const timers = useRef<{ stop?: ReturnType<typeof setTimeout>; tick?: ReturnType<typeof setInterval> }>({});
+  const finalText = useRef("");
+  const onFinalRef = useRef(onFinal);
+  onFinalRef.current = onFinal;
+
+  useEffect(() => {
+    if (getSpeechCtor()) setMode("speech");
+    else if (typeof MediaRecorder !== "undefined" && "mediaDevices" in navigator) setMode("recorder");
+    else setMode("none");
+  }, []);
+
+  const clearTimers = () => {
+    if (timers.current.stop) clearTimeout(timers.current.stop);
+    if (timers.current.tick) clearInterval(timers.current.tick);
+    timers.current = {};
+  };
+
+  const startSpeech = useCallback(() => {
+    const Ctor = getSpeechCtor();
+    if (!Ctor) return;
+    const rec = new Ctor();
+    rec.lang = "bn-BD";
+    rec.interimResults = true;
+    rec.continuous = false; // one question
+    rec.maxAlternatives = 1;
+    finalText.current = "";
+    rec.onresult = (e) => {
+      let interimText = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) finalText.current += r[0].transcript;
+        else interimText += r[0].transcript;
+      }
+      setInterim((finalText.current + " " + interimText).trim());
+    };
+    rec.onerror = (e) => {
+      if (e.error === "aborted") return;
+      setError(SPEECH_ERRORS[e.error] ?? "ভয়েস চিনতে সমস্যা হয়েছে। আবার বলুন অথবা প্রশ্নটি লিখুন।");
+      // Chrome's recognizer needs Google's servers; if they fail, use our Whisper fallback next time.
+      if (e.error === "network" && typeof MediaRecorder !== "undefined") setMode("recorder");
+    };
+    rec.onend = () => {
+      setState("idle");
+      setInterim("");
+      const text = finalText.current.trim();
+      if (text) onFinalRef.current(text);
+    };
+    recognition.current = rec;
+    setError(null);
+    setState("listening");
+    rec.start();
+  }, []);
+
+  const startRecorder = useCallback(async () => {
+    setError(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError(SPEECH_ERRORS["not-allowed"]);
+      return;
+    }
+    const mimeType = pickMimeType();
+    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+    rec.onstop = async () => {
+      clearTimers();
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+      if (blob.size === 0) {
+        setState("idle");
+        return;
+      }
+      setState("transcribing");
+      try {
+        const { transcript } = await transcribeAudio(blob);
+        onFinalRef.current(transcript);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "কথা বোঝা যায়নি। আবার বলুন অথবা প্রশ্নটি লিখুন।");
+      } finally {
+        setState("idle");
+      }
+    };
+    recorder.current = rec;
+    rec.start();
+    setState("recording");
+    setElapsed(0);
+    const started = Date.now();
+    timers.current.tick = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 250);
+    timers.current.stop = setTimeout(() => rec.state !== "inactive" && rec.stop(), MAX_RECORD_MS);
+  }, []);
+
+  const start = useCallback(() => {
+    if (mode === "speech") startSpeech();
+    else if (mode === "recorder") void startRecorder();
+    else setError(UNSUPPORTED);
+  }, [mode, startSpeech, startRecorder]);
+
+  const stop = useCallback(() => {
+    if (state === "listening") recognition.current?.stop();
+    if (state === "recording" && recorder.current?.state !== "inactive") recorder.current?.stop();
+  }, [state]);
+
+  useEffect(
+    () => () => {
+      clearTimers();
+      recognition.current?.abort();
+      if (recorder.current && recorder.current.state !== "inactive") recorder.current.stop();
+    },
+    [],
+  );
+
+  return { mode, state, interim, error, elapsed, maxSeconds: MAX_RECORD_MS / 1000, start, stop, clearError: () => setError(null) };
+}

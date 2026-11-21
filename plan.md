@@ -168,12 +168,17 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 
 ## Phase 6 — Voice input (~2 h)
 
-- [ ] `useSpeechInput` hook (bn-BD, interim text, edit before sending, Bangla error messages)
-- [ ] MediaRecorder fallback (30 s) → `/chat/voice/transcribe`
-- [ ] Backend transcribe endpoint (ffmpeg 16 kHz mono, Whisper with domain prompt, temp files deleted) and `/chat/voice`
-- [ ] Tests with Groq mocked and a generated WAV
+- [x] `useSpeechInput` hook (bn-BD, interim text, edit before sending, Bangla error messages)
+- [x] MediaRecorder fallback (30 s) → `/chat/voice/transcribe`
+- [x] Backend transcribe endpoint (ffmpeg 16 kHz mono, Whisper with domain prompt, temp files deleted) and `/chat/voice`
+- [x] Tests with Groq mocked and a generated WAV
+
+- [x] **Added:** silence check (ffmpeg volumedetect) and a prompt-echo guard. A real Whisper call turned a pure test tone into "প্রতিবন্ধী ভাতা", a word from the domain prompt, so such transcripts are discarded.
+- [ ] Real-microphone check in Chrome and Firefox (human task: speak a dialect question, edit, send)
 
 **Done when:** speaking in Chrome works, and the Firefox recording fallback works.
+
+> Verified 21 Nov in headless Chromium: the speech path (scripted recognizer) shows interim text and puts the final text in the input without sending. The recorder path (fake mic, no SpeechRecognition) goes upload → ffmpeg → real Groq Whisper → prompt echo discarded → Bangla "couldn't understand" message. No page errors.
 
 ## Phase 7 — PDF, legacy font and local OCR (~4 h)
 

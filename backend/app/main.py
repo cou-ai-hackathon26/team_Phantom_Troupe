@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routes import chat, feedback, health, sources
+from app.api.routes import chat, feedback, health, sources, voice
 from app.core.config import settings
 from app.core.logging import setup_logging
 
@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for router in (health.router, chat.router, sources.router, feedback.router):
+    for router in (health.router, voice.router, chat.router, sources.router, feedback.router):
         app.include_router(router, prefix="/api/v1")
     return app
 

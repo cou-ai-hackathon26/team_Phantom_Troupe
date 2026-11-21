@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic } from "lucide-react";
 import { AnswerCard } from "@/components/chat/answer-card";
 import { AnswerError, AnswerSkeleton, UserBubble } from "@/components/chat/answer-states";
 import { AreaCards } from "@/components/chat/area-cards";
 import { CitationSheet, type SourceView } from "@/components/chat/citation-sheet";
 import { Composer } from "@/components/chat/composer";
+import { MicButton } from "@/components/chat/mic-button";
+import { useSpeechInput } from "@/hooks/use-speech-input";
+import { toBnDigits } from "@/lib/bn";
 import { ApiError, askQuestion, getChunk } from "@/lib/api";
 import type { ChatResponse, Citation } from "@/lib/types";
 
@@ -33,6 +35,31 @@ export default function ChatPage() {
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const busy = turns.some((t) => t.state === "loading");
+  const [showMicHint, setShowMicHint] = useState(false);
+
+  // voice: final text goes into the input box for the user to check and edit — never auto-sent
+  const voice = useSpeechInput((text) => {
+    setInput(text);
+    requestAnimationFrame(() => document.getElementById("question")?.focus());
+  });
+
+  useEffect(() => {
+    try {
+      setShowMicHint(window.localStorage.getItem("adhikarai.micHintSeen") !== "1");
+    } catch {
+      setShowMicHint(true);
+    }
+  }, []);
+
+  const startVoice = () => {
+    setShowMicHint(false);
+    try {
+      window.localStorage.setItem("adhikarai.micHintSeen", "1");
+    } catch {
+      /* storage blocked: hint simply shows again next time */
+    }
+    voice.start();
+  };
 
   const run = useCallback(async (id: number, question: string) => {
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "loading", error: undefined } : t)));
@@ -110,15 +137,17 @@ export default function ChatPage() {
           onChange={setInput}
           onSubmit={() => ask(input)}
           busy={busy}
-          mic={
-            <button
-              type="button"
-              disabled
-              aria-label="মাইকে প্রশ্ন বলুন (শীঘ্রই)"
-              className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50 sm:size-16"
-            >
-              <Mic className="size-6" aria-hidden />
-            </button>
+          mic={<MicButton state={voice.state} onStart={startVoice} onStop={voice.stop} disabled={busy} />}
+          hint={
+            <VoiceStatus
+              state={voice.state}
+              interim={voice.interim}
+              error={voice.error}
+              elapsed={voice.elapsed}
+              maxSeconds={voice.maxSeconds}
+              showHint={showMicHint && voice.mode !== "none"}
+              onDismissError={voice.clearError}
+            />
           }
         />
       </div>
@@ -126,4 +155,54 @@ export default function ChatPage() {
       <CitationSheet source={source} onOpenChange={(open) => !open && setSource(null)} />
     </div>
   );
+}
+
+interface VoiceStatusProps {
+  state: ReturnType<typeof useSpeechInput>["state"];
+  interim: string;
+  error: string | null;
+  elapsed: number;
+  maxSeconds: number;
+  showHint: boolean;
+  onDismissError: () => void;
+}
+
+function VoiceStatus({ state, interim, error, elapsed, maxSeconds, showHint, onDismissError }: VoiceStatusProps) {
+  if (state === "listening") {
+    return (
+      <p className="mt-2 rounded-xl bg-primary-soft px-3 py-2 text-[0.98rem]" aria-live="polite">
+        <span className="font-semibold text-primary">শুনছি… </span>
+        {interim || <span className="text-muted-foreground">আপনার ভাষায় প্রশ্নটি বলুন, শেষ হলে থামুন।</span>}
+      </p>
+    );
+  }
+  if (state === "recording") {
+    return (
+      <p className="mt-2 rounded-xl bg-primary-soft px-3 py-2 text-[0.98rem]" aria-live="polite">
+        <span className="font-semibold text-primary">রেকর্ড হচ্ছে… </span>
+        {toBnDigits(elapsed)}/{toBnDigits(maxSeconds)} সেকেন্ড। বলা শেষ হলে লাল বোতামে চাপ দিন।
+      </p>
+    );
+  }
+  if (state === "transcribing") {
+    return (
+      <p className="mt-2 text-[0.98rem] text-muted-foreground" aria-live="polite">
+        কথা লেখায় রূপান্তর হচ্ছে…
+      </p>
+    );
+  }
+  if (error) {
+    return (
+      <p className="mt-2 flex items-start justify-between gap-2 rounded-xl bg-status-partial-bg px-3 py-2 text-[0.95rem] text-status-partial" role="alert">
+        <span>{error}</span>
+        <button type="button" onClick={onDismissError} className="shrink-0 font-semibold underline-offset-4 hover:underline">
+          ঠিক আছে
+        </button>
+      </p>
+    );
+  }
+  if (showHint) {
+    return <p className="mt-2 text-center text-sm text-primary">মাইকে চাপ দিয়ে আপনার ভাষায় প্রশ্ন বলুন</p>;
+  }
+  return null;
 }

@@ -69,3 +69,10 @@ export const sendFeedback = (queryLogId: string | null, rating: "up" | "down") =
     method: "POST",
     body: JSON.stringify({ query_log_id: queryLogId, rating }),
   });
+
+export function transcribeAudio(blob: Blob) {
+  const form = new FormData();
+  const ext = blob.type.includes("mp4") ? "mp4" : blob.type.includes("ogg") ? "ogg" : "webm";
+  form.append("audio", blob, `question.${ext}`);
+  return request<{ transcript: string }>("/chat/voice/transcribe", { method: "POST", body: form });
+}
