@@ -72,8 +72,8 @@ hf_cache/
 
 # ---------------------------------------------------------------------
 # Data
-# Tracked deliberately: data/originals/ and data/processed/*.jsonl
-# Ignored: anything rebuildable from them
+# Tracked deliberately: data/originals/ (uploaded source documents)
+# Ignored: anything rebuildable from the sources (parsed text, chunks, indexes)
 # ---------------------------------------------------------------------
 data/index/
 data/parsed/
@@ -93,12 +93,11 @@ tmp_audio/
 # for this rule to take effect)
 /data/Workers — Bangladesh Labour Act 2006/
 
-# Full source dataset (~1 GB, includes a 192 MB SQLite) stays local, as do
-# outputs that are large and rebuilt from it in seconds by scripts/ingest_dataset.py
+# Full source dataset (~1 GB, includes a 192 MB SQLite) stays local.
 /data/DataSet/
-/data/processed/all_documents.jsonl
-/data/processed/chunks/
-/data/processed/laws-*.jsonl
+# Ingestion outputs (parsed sections, chunks, step markers, logs; ~380 MB, all_documents.jsonl
+# alone is over GitHub's 100 MB limit). Rebuilt by scripts/ingest_dataset.py; share separately.
+/data/processed/
 
 # Local DB / vector store volumes (infra/docker-compose.yml offline profile)
 infra/data/
