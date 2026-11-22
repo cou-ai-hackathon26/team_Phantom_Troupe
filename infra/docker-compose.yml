@@ -1,9 +1,6 @@
 # Default: only the API runs locally; Postgres = Supabase, vectors = Qdrant Cloud (URLs in ../.env).
-# Offline fallback (weak venue internet):
-#   docker compose -f infra/docker-compose.yml --profile offline up -d
-#   then in .env: DATABASE_URL=postgresql+asyncpg://adhikarai:${POSTGRES_PASSWORD}@localhost:5432/adhikarai
-#                 QDRANT_URL=http://localhost:6333   (QDRANT_API_KEY empty)
-#   and re-run: python scripts/create_tables.py && python scripts/ingest_jsonl.py
+# Offline profile: local Qdrant and Postgres. Unrehearsed; follow README.md -> "Demo day".
+# Do not run ingest_jsonl.py unless QDRANT_URL is localhost: it overwrites the index it points at.
 services:
   api:
     build: ../backend

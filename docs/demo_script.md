@@ -1,48 +1,62 @@
 # AdhikarAI — 3-minute demo script
 
-**Before going on stage** (30 minutes before):
+Updated 22 Nov for the full corpus. Q1–Q5 gave a correct answer or the correct refusal in every test run that day (`openai/gpt-oss-120b`, two or more runs each). **Re-check all five after any change to the model, prompts, code or data.**
 
-1. `cd backend && .venv/bin/python scripts/warmup.py` wakes Supabase and Qdrant, loads the embedding model and pre-caches every question below (real pipeline answers only).
-2. Start the API (`.venv/bin/uvicorn app.main:app --port 8000`) and the UI (`cd frontend && npm run build && npx next start -p 3000`).
-3. Open **Chrome** at `http://localhost:3000` and allow the microphone once. Firefox has no `bn-BD` speech recognition.
-4. Weak venue Wi-Fi? Use a phone hotspot. If the cloud databases are unreachable, switch to the offline profile (see README → Offline fallback).
+## Before going on stage (30 minutes before)
 
-> The corpus currently covers the **Bangladesh Labour Act 2006**: the preamble and §§ 1–20 with amendment notes. The planned "unpaid wages" opener needs the wage-payment chapter, which isn't ingested yet. Until it is, open with lay-off compensation. When it's added, put the wage question in the list below and re-run `warmup.py`.
+1. `cd backend && .venv/bin/python scripts/warmup.py`, then **read its output**: Q1–Q4 must be `answered` and Q5 `refused`. Refusals are never cached, so Q5 is always live (about 1–2 s).
+2. Start the API (`.venv/bin/uvicorn app.main:app --port 8000`) and the UI (`cd frontend && npm run build && npx next start -p 3000`). The API needs its own time to load the index and model, so start it early.
+3. Open **Chrome** at **`http://localhost:3000/?debug`**. Without `?debug` the "how this was found" panel is hidden. Allow the microphone once and set the language switch to **বাং**.
+4. Ask Q1–Q4 once in the UI and read each answer against its source, then press **নতুন প্রশ্ন**. Don't reload without `?debug`.
+5. Weak venue Wi-Fi? Use a phone hotspot and set `WEB_FALLBACK=false` before starting the API.
 
 ## Script
 
 | Time | Do | Say (Bangla, short) |
 |---|---|---|
-| 0:00 | Home screen | "অধিকারAI সরকারি আইন থেকে উত্তর দেয়, সূত্রসহ। মানুষ নিজের ভাষায় প্রশ্ন বলবে।" |
-| 0:15 | Tap the mic and say the **dialect question** (Q1). Show the recognized text in the box, then send. | "আঞ্চলিক ভাষায় বললাম; লেখাটা পাঠানোর আগে ঠিক করে নেওয়া যায়।" |
-| 0:40 | Point at the answer card: status badge, numbered steps, `[১]` markers | "প্রতিটি কথার পাশে সূত্র নম্বর।" |
-| 0:55 | Open **"এই উত্তর কীভাবে পাওয়া গেল"** | "প্রশ্নটি প্রমিত বাংলায় সাজানো হয়েছে, বিষয় চেনা হয়েছে, আর অর্থ ও শব্দ, দুই রকম খোঁজের ফল RRF দিয়ে মেলানো হয়েছে।" |
-| 1:20 | Tap a `[১]` marker to open the source sheet, then tap **মূল উৎস দেখুন** | "মূল ধারার লেখা আর সরকারি ওয়েবসাইটের লিংক। সংশোধনী টীকাও আছে।" |
-| 1:45 | Type the **off-topic question** (Q3) | "নথিতে নেই এমন প্রশ্নে অধিকারAI বানিয়ে বলে না।" Show the refusal card and the **৩৩৩-এ কল করুন** button. |
-| 2:10 | Ask Q4 (a land question) | "জমির নথি এখনো যুক্ত হয়নি, তাই উত্তর দেয়নি। কোন বিষয়ে নথি আছে, সেটাই সীমা।" |
-| 2:25 | Go to **কীভাবে কাজ করে** → মূল্যায়ন table | "পরীক্ষার প্রশ্নে মাপা ফল: বিষয়বহির্ভূত প্রশ্নে কত বার ঠিকভাবে বিরত থেকেছে, সূত্র কতটা সঠিক, সময় কত।" |
-| 2:50 | Close | "ছোট, যাচাইযোগ্য, সূত্রনির্ভর ব্যবস্থা।" |
+| 0:00 | Home screen | "অধিকারAI সরকারি আইন ও নথি থেকে সূত্রসহ উত্তর দেয়। মানুষ নিজের ভাষায় প্রশ্ন বলবে।" |
+| 0:15 | Tap the mic and say **Q1** (dialect). Correct the text to match Q1 so it hits the cache, then send. | "আঞ্চলিক ভাষায় বললাম; পাঠানোর আগে লেখাটা ঠিক করে নেওয়া যায়।" |
+| 0:40 | Point at the answer card and its source | "উত্তরের সাথে আইনের নাম আর ধারা।" |
+| 0:55 | Open **"এই উত্তর কীভাবে পাওয়া গেল"** | "প্রশ্নটি প্রমিত বাংলায় সাজানো হয়েছে, বিষয় চেনা হয়েছে, আর অর্থ ও শব্দ, দুই রকম খোঁজের ফল মেলানো হয়েছে।" |
+| 1:20 | Tap the source, then **মূল উৎস দেখুন** | "মূল ধারার লেখা আর সরকারি ওয়েবসাইটের লিংক।" |
+| 1:40 | Ask **Q3** (named act and section) | "আইন আর ধারার নম্বর বললে সেই ধারাটিই আনে।" |
+| 2:05 | Ask **Q4** (Constitution) | "শুধু শ্রম আইন নয়, সংবিধানসহ দেশের অন্যান্য আইনও আছে।" |
+| 2:25 | Ask **Q5** (off-topic). Show the refusal card and the **৩৩৩** button. | "নথিতে নেই এমন প্রশ্নে বানিয়ে বলে না।" |
+| 2:45 | Close | "এটি আইনি পরামর্শ নয়; সূত্র দেখে যাচাই করার সহায়ক। নির্ভুলতার মূল্যায়ন এখনো চলছে।" |
+
+Q2 is the typed backup for Q1 if the microphone fails.
 
 ## Demo questions (pre-cached by `warmup.py`)
 
 The warm-up script reads every line below that starts with `- Q`.
 
-- Q1: লে-অফ অইলে শ্রমিকে কিছু টেকা পাইবো নি?
-- Q2: চাকরি থেকে ছাঁটাই করলে কী কী পাওনা পাব?
-- Q3: আজকে ঢাকার আবহাওয়া কেমন থাকবে?
-- Q4: জমির নামজারি করতে কী কী কাগজ লাগে?
-- Q5: শিক্ষানবিশ শ্রমিকের শিক্ষানবিশীকাল কত দিন?
-- Q6: লে-অফ হলে শ্রমিক কি ক্ষতিপূরণ পায়?
-- Q7: শ্রম আইনের ধারা ১৯ এ কী বলা আছে?
-- Q8: মালিক কি শ্রমিককে নিয়োগপত্র দিতে বাধ্য?
+- Q1: মালিকে কি শ্রমিকরে নিয়োগপত্র দেওন লাগবো?
+- Q2: মালিক কি শ্রমিককে নিয়োগপত্র দিতে বাধ্য?
+- Q3: বাংলাদেশ শ্রম আইন ২০০৬ এর ধারা ১৯ এ কী বলা আছে?
+- Q4: সংবিধানের অনুচ্ছেদ ২৭ কী বলে?
+- Q5: আজকে ঢাকার আবহাওয়া কেমন থাকবে?
 
-**Voice note:** spoken Q1 may be transcribed slightly differently from the typed text, so it may miss the cache. That's fine: a live answer takes about 2–3 s when Groq isn't rate-limited. Don't ask questions back to back. The free tier throttles at a few answers per minute, and back-to-back evaluation runs measured 17–25 s per answer.
+## Do not demo until fixed (`plan.md` Phase 12)
+
+| Topic | What happens now |
+|---|---|
+| Old-age allowance eligibility (বয়স্ক ভাতা) | answers with widow-allowance rules |
+| Lay-off compensation, including the old dialect opener | wrong act; the dialect meaning is reversed |
+| "শ্রম আইনের ধারা ১৯" without the year | returns the 2026 Amendment Act |
+| Retrenchment dues (ছাঁটাই), Bangla or Banglish | unstable: partial, or mixes in the EPZ act |
+| Namjari documents | refused |
+| Probation period | can drop a legal condition |
+| GD requirements | expands জিডি wrongly and cites a compiled guide as official |
+| মূল্যায়ন tab in `/admin` | numbers are from the old 55-chunk corpus |
+
+Several of these are **starter suggestions on the home screen**, so don't tap those. If judges ask about these topics, say they are known open issues.
 
 ## If something fails
 
 | Symptom | Fix |
 |---|---|
-| "কিছুক্ষণ পর আবার চেষ্টা করুন" (rate limit) | Ask a pre-cached question instead, or wait about 30 s. Teammates' own Groq keys add quota. |
-| Mic does nothing | Check the site permission; use Chrome; the typed fallback always works. |
+| "কিছুক্ষণ পর আবার চেষ্টা করুন" (rate limit) | Ask a pre-cached question, or wait about 30 s. Uncached answers can take up to about 30 s. |
+| Mic does nothing | Check the site permission and use Chrome, or type Q2. |
 | "সার্ভারের সাথে সংযোগ হচ্ছে না" | Check that the API is running on :8000 and that `NEXT_PUBLIC_API_URL` points to it. |
-| Health shows Postgres/Qdrant FAIL | Run `warmup.py` (paused free projects take a minute to wake), or use the offline profile. |
+| Health shows Postgres FAIL | Often just a slow cold connection (5 s limit): check again. If it persists, run `warmup.py --skip-cache`. |
+| Health shows Qdrant FAIL | Run `warmup.py --skip-cache` to wake it. Questions can't be answered without Qdrant. |

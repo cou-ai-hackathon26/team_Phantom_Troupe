@@ -3,7 +3,9 @@
 Schedule: 21–23 Nov 2026 to build, 24 Nov morning to polish, then the final demo. MVP comes first. Phases 1–6 are the core and Phases 7–9 make it competitive.
 Rules are in `CLAUDE.md` and the spec is `docs/pipeline.md`.
 
-> **Status note (21 Nov):** the team supplied **PDFs** rather than the prepared JSONL: 21 bdlaws.minlaw.gov.bd section-print PDFs of the Labour Act in `data/Workers — Bangladesh Labour Act 2006/` (preamble plus §§ 1–20 and 3ক). Phase 2 therefore gained a PDF → section-JSONL step (`scripts/convert_pdfs.py`, pulled forward from Phase 7), and ingestion runs on that real data. The land, GD and allowance documents haven't arrived yet. `.env` now has Supabase, Qdrant and Groq (all three connection checks OK). `LLM_MODEL` is still unset (recommended: `openai/gpt-oss-20b`). Phases 1–7 are complete. Phases 8–9 are built and the remaining items are human tasks: labelling the gold set, setting `LLM_MODEL`, warm-up, rehearsal and the other areas' documents.
+> **Status (22 Nov): built and ingested, not yet demo-ready.** Phases 1–11 are built. The full DataSet is live (1,927 documents, 73,805 chunks, equal in all three stores). 181 backend tests pass (2 skipped); ruff, frontend lint and build are clean. Manual checks on the full corpus found wrong-source answers. **Phase 12 is the work left before 24 Nov.**
+>
+> Phases 1–10 below are kept as a build log, so their notes, counts and results describe the corpus on the day they were written (55 chunks, Labour Act §§ 1–20).
 
 ## Architecture
 
@@ -15,18 +17,21 @@ flowchart TD
     FE --> CHAT[/POST /api/v1/chat/]
     CHAT --> CACHE{answer cache hit?}
     CACHE -->|yes| OUT
-    CACHE -->|no| C1[Call 1: normalize + classify area]
+    CACHE -->|no| C1[Call 1: normalize + classify area + search query]
     C1 --> GATE1{in_scope? clarify?}
     GATE1 -->|no| REF[refusal / clarify]
-    GATE1 -->|yes| RET[dense Qdrant top20 + BM25 top20]
+    GATE1 -->|yes| RET[dense top20 + BM25 top20, in the area and in all areas]
     RET --> RRF[RRF k=60 → top 5]
     RRF --> GATE2{best cosine ≥ min OR BM25 hit top3?}
-    GATE2 -->|no| REF
-    GATE2 -->|yes| C2[Call 2: grounded answer JSON]
+    GATE2 -->|weak| WEB[web fallback: official sites]
+    WEB -->|no passages and gate failed| REF
+    WEB -->|otherwise| C2
+    GATE2 -->|strong| C2[Call 2: grounded answer JSON]
     C2 --> VAL[citation + numeric validation]
     VAL --> OUT[answered / partial / refused]
     subgraph Offline
       JSONL[data/processed/*.jsonl] --> ING[normalize → chunk → embed]
+      DS[data/DataSet: PDF, Markdown, SQLite → ingest_dataset.py] --> ING
       PDF[PDF → PyMuPDF / Bijoy convert / OCR] --> ING
       ING --> PG[(Supabase Postgres)]
       ING --> QD[(Qdrant Cloud)]
@@ -41,14 +46,16 @@ All routes live under `/api/v1`.
 | Method | Path | Request | Response |
 |---|---|---|---|
 | GET | `/health` | — | `{"status":"ok\|degraded","services":{"postgres":{"ok":bool,"detail":str},"qdrant":{...},"groq":{...},"embedding":{...}},"version":str}` |
-| POST | `/chat` | `{"message":str(2..2000),"area":"land\|gd\|allowance\|labour"?,"debug":bool=false}` | `{"status":"answered\|partial\|refused\|clarify","answer":str,"citations":[{"chunk_id","act","section","title","citation","excerpt","source_url"}],"normalized_question":str,"area":str,"warnings":[str],"trace":{...}\|null,"latency_ms":int,"cached":bool}` |
+| POST | `/chat` | `{"message":str(2..2000),"area":"land\|gd\|allowance\|labour\|general"?,"debug":bool=false,"user_doc_id":str?}` | `{"status":"answered\|partial\|refused\|clarify","answer":str,"citations":[{"chunk_id","act","section","title","citation","excerpt","source_url"}],"normalized_question":str,"area":str,"warnings":[str],"trace":{...}\|null,"latency_ms":int,"cached":bool}` |
 | POST | `/chat/voice/transcribe` | multipart `audio` (≤10 MB, ≤30 s) | `{"transcript":str}` |
 | POST | `/chat/voice` | multipart `audio` | the `/chat` response plus `"transcript":str` |
-| GET | `/sources?area=` | — | `[{"document_id","title","area","source_url","chunk_count"}]` |
+| GET | `/sources?area=&q=&page=&page_size=` | — | `{"items":[{"document_id","title","area","issuer","source_url","section_count","chunk_count"}],"total","page","page_size","pages","counts"}` |
 | GET | `/sources/documents/{document_id}` | — | `{"document":{...},"chunks":[{"chunk_id","section","title","citation"}]}` |
 | GET | `/sources/{chunk_id}` | — | `{"chunk_id","document_id","area","act","chapter","section","title","citation","text","source_url"}` |
-| POST | `/feedback` | `{"query_log_id":str,"rating":"up\|down","comment":str?}` | `{"ok":true}` |
+| POST | `/feedback` | `{"query_log_id":str,"rating":"up\|down","comment":str?}` | `{"ok":true,"stored":bool}` |
 | GET | `/eval/latest` | — | contents of `data/evaluation/results.json`, or 404 |
+
+The admin and `/user-docs` routes are listed in `README.md` → API. Citations have `kind` = official, user or web.
 
 Each `/chat` response also carries `request_id` (pass it to `/feedback`). Citations also carry `marker` (the number shown as `[১]` in the answer) and `notes` (amendment footnotes). Errors: HTTP 503 `{"detail":{"code":"rate_limited|llm_not_configured|llm_unavailable|index_missing","message":"<Bangla>"}}`.
 
@@ -58,17 +65,18 @@ Each `/chat` response also carries `request_id` (pass it to `/feedback`). Citati
 
 - **documents:** `id` (pk, slug), `title`, `area`, `issuer`, `source_url`, `source_file`, `language`, `review_status`, `sha256`, `created_at`
 - **chunks:** `id` (pk), `document_id` (fk), `area`, `act`, `chapter`, `section`, `title`, `citation`, `part` (int, null when unsplit), `text`, `normalized_text`, `token_count`, `page_start`, `page_end`, `qdrant_point_id` (uuid), `created_at`
-- **query_logs:** `id` (uuid), `created_at`, `normalized_question`, `area`, `status`, `retrieved_chunk_ids` (json), `best_dense_score`, `latency_ms`, `llm_calls`, `cached`, `model`. Personal data is not stored: the raw message is kept only if it has fewer than 300 characters and the PII-redaction regex finds no phone or NID number.
+- **query_logs:** `id` (uuid), `created_at`, `normalized_question`, `area`, `status`, `retrieved_chunk_ids` (json), `best_dense_score`, `latency_ms`, `llm_calls`, `cached`, `model`, `message`. The raw message is kept only if it has at most 300 characters and no phone or NID-like number. `normalized_question` is stored unredacted, except for personal-document questions.
 - **feedback:** `id`, `query_log_id` (fk), `rating`, `comment`, `created_at`
+- **admin_users:** `id`, `email`, `password_hash`, `created_at`, `last_login_at`
 - **answer_cache:** `key` (sha256 of normalized question + area + model), `response_json`, `created_at`
 
 ## Qdrant
 
-Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distance. Point ID = `uuid5(NAMESPACE, chunk_id)`. Payload: `chunk_id, area, act, section, citation, document_id`. Payload index: `area` (keyword).
+Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distance. Point ID = `uuid5(NAMESPACE, chunk_id)`. Payload: `chunk_id, area, act, section, citation, document_id`. Payload indexes: `area`, `document_id` (keyword).
 
 ## Env variables (`.env.example`)
 
-`APP_ENV, LOG_LEVEL, CORS_ORIGINS, DATABASE_URL, QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION, GROQ_API_KEY, LLM_MODEL, LLM_TIMEOUT_S, STT_MODEL, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_DEVICE, RETRIEVAL_MIN_SCORE, BM25_PATH, OCR_PROVIDER, OCR_SECOND_ENGINE, OCR_DEVICE, OCR_MIN_CONFIDENCE`, plus the frontend's `NEXT_PUBLIC_API_URL`.
+`APP_ENV, LOG_LEVEL, CORS_ORIGINS, DATABASE_URL, QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION, GROQ_API_KEY, LLM_MODEL, LLM_TIMEOUT_S, STT_MODEL, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_DEVICE, RETRIEVAL_MIN_SCORE, BM25_PATH, OCR_PROVIDER, OCR_SECOND_ENGINE, OCR_DEVICE, OCR_MIN_CONFIDENCE, APP_SECRET_KEY, ADMIN_SESSION_HOURS, ADMIN_TOKEN, MAX_UPLOAD_MB, USER_DOC_TTL_MINUTES, TAVILY_API_KEY, WEB_FALLBACK, WEB_TRIGGER_SCORE, WEB_MAX_RESULTS, WEB_ALLOWED_DOMAINS`, plus the frontend's `NEXT_PUBLIC_API_URL`.
 
 ---
 
@@ -141,7 +149,7 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [x] Orchestrator, `/chat`, answer cache, query logging, `/sources`, `/feedback`
 - [x] Mocked tests: refusal paths, invalid ID dropped, numeric mismatch, clarify, cache hit
 - [x] Model comparison run (`test_llm_models.py ... --with-answer`) on gpt-oss-120b, gpt-oss-20b and qwen3.8-27b. **Recommended: `openai/gpt-oss-20b`** (correct dialect and Banglish normalization, faithful numbers, about 1.5 s for both calls). 120b flipped a dialect question's meaning; qwen changed a Banglish question's meaning and rewrote numbers.
-- [ ] Set `LLM_MODEL=openai/gpt-oss-20b` in `.env` (team decision)
+- [x] `LLM_MODEL` set in `.env`. It is `openai/gpt-oss-120b`, not the recommended 20b: see 12.2.
 - [x] Verified end to end with curl: labour question answered with §11/§20 citations, the repeat served from cache in 0 ms, off-topic and land questions refused with the exact text.
 
 > Free-tier note: each answered question costs about 2.5k tokens, mostly Bangla source text. Groq TPM limits caused 10–20 s spikes in back-to-back tests, so warm the cache for demo questions (Phase 9).
@@ -186,8 +194,9 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [x] Bijoy → Unicode converter (longest-match table, pre-base vowel and reph reordering, NFC, post-fix rules) with known-pair tests (`eq¯‹fvZv` → `বয়স্কভাতা` and others). It reports unmapped glyphs; pages over 2% unmapped go to OCR or review. **The table is core-only; spot-check against a real legacy PDF.**
 - [x] OCR service (Tesseract `ben+eng`, then EasyOCR when confidence is below the minimum; engine and confidence per page; `needs_review`; `release()` frees the GPU before embedding). The Surya and PaddleOCR adapters are left unwired until `compare_ocr.py` shows one is worth it.
 - [x] `compare_ocr.py` and `ingest_pdf.py` (auto-detects bdlaws vs generic; preserves originals in `data/originals/<area>/` with sha256; `data/sources_log.csv` and `data/sources_registry.json`; reuses the Phase 2 pipeline via `app/ingestion/pipeline.py`)
-- [ ] Install Tesseract with `ben` (`sudo dnf install tesseract tesseract-langpack-ben`) and optionally `uv pip install easyocr`, then run `compare_ocr.py` on 3–5 real scanned pages (human task, needs sudo)
-- [ ] Ingest real land, GD and allowance PDFs with `ingest_pdf.py` (blocked: documents not supplied yet)
+- [x] Tesseract with `ben` and EasyOCR installed
+- [ ] Run `compare_ocr.py` on 3–5 real scanned pages and check by eye (human task)
+- [x] Real land, GD and allowance PDFs ingested (Phase 11)
 
 **Done when:** a text PDF, a legacy-font PDF and a scanned page all ingest and are searchable.
 
@@ -230,7 +239,7 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [x] `docs/demo_script.md` (3 minutes). The opener is lay-off compensation in dialect, because the wage-payment chapter for the planned "unpaid wages" question isn't ingested.
 - [x] Offline fallback documented (README → Demo day). Not rehearsed with Docker yet.
 - [x] QA so far: 109 backend tests pass, ruff clean, `npm run lint` and `npm run build` pass, 360/1440 px screenshots checked in Phase 5, secret scan of tracked files and API logs clean, `.env` untracked
-- [ ] Set `LLM_MODEL=openai/gpt-oss-20b` in `.env`, run `warmup.py` the day before and the morning of the demo
+- [ ] Settle the model (12.2), then run `warmup.py` the day before and the morning of the demo
 - [ ] Rehearse the demo in Chrome with a real microphone; rehearse the offline profile once
 - [ ] Final QA after the remaining documents are ingested
 
@@ -248,7 +257,7 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [x] Tests: 10 new (admin auth, upload → incremental index → delete with fakes, user-doc store and TTL, upload endpoint, private chat path, expired doc). 120 backend tests pass.
 - [x] Verified live in Chromium: wrong and right token; upload of a real bdlaws PDF → job done → visible → viewed → deleted (stores back to 55 = 55 = 55); a scanned image attached → Tesseract OCR → answer citing "আপনার নথি"; no page errors; 360 px without overflow
 - [x] **Admin login with email and password** (team request): `admin_users` table with salted scrypt hashes, `POST /admin/login` → HMAC-signed session token (12 h), `scripts/create_admin.py` to create an admin or reset a password, login form on `/admin`. The first admin account was created in Supabase. Verified: wrong password → Bangla error; correct login → dashboard; session survives reload; logout works.
-- [ ] Set a long random `APP_SECRET_KEY` in `.env` so sessions survive API restarts (team)
+- [x] Set a long random `APP_SECRET_KEY` in `.env` so sessions survive API restarts (team)
 - [ ] Change the first admin's password after the hackathon (`scripts/create_admin.py <email>`)
 
 ## Phase 11 — Full DataSet ingestion (added 21 Nov, team request)
@@ -259,11 +268,45 @@ Survey (21 Nov): 679 unique PDFs (29 byte-identical duplicates, skipped). Pages 
 
 - [x] 11.1 New area `general` (other Bangladesh laws, NHRC) in constants, the LLM schema, `normalize.md`, frontend types and area cards, and CLAUDE.md
 - [x] 11.2 Tooling: `app/ingestion/dataset_sources.py` (step manifest, sha256 dedupe), `markdown_parser.py`, `sqlite_laws.py` (keyword area mapping, skips act-952/1672, which come from the PDFs), incremental per-document indexing (embed only new chunks, per-document Qdrant/Postgres replace, batched inserts, per-document chunk cache, BM25 rebuilt from the cache), an OCR garbage filter, an O(n) duplicate-id check, `scripts/ingest_dataset.py --list | --wipe | --step <name>`, and tests. Also fixed: the bdlaws parser read only 23 of the 369 PDFs re-printed in the 2026 layout (left-aligned title block, margin titles glued to the body, no chapter in amendment acts), and now reads 368 sections plus the preamble; the Amendment Act reads 93 sections (inserted sections stay in their amending section); exact "ধারা N" matching is limited to the named or retrieved act; "শ্রম আইন ২০০৬ ধারা ৪" no longer reads 2006 as a section
-- [ ] 11.3 Wipe: Qdrant collection recreated, `chunks`/`documents`/`answer_cache` emptied, processed JSONL, registry and BM25 cleared
-- [ ] 11.4 Ingest step by step, checking counts in all three stores plus one sample retrieval after each: labour-2006 → labour-2026 → online-gd → police → nhrc → land (6 subfolders) → dss (8 subfolders) → md guides → chronological index (5 eras)
-- [ ] 11.5 Tests, eval rerun, warmup, README credits and data status, commit
+- [x] 11.3 Wipe: the old chunks are gone, and every document in the stores comes from the dataset registry
+- [x] 11.4 Ingest step by step: all 26 steps done (the Constitution was added as a step), 1,927 documents, 73,805 chunks in Postgres = Qdrant = BM25
+- [x] 11.5a Tests, README credits and data status, docs updated (22 Nov)
+- [ ] 11.5b Eval rerun and warm-up (after Phase 12 fixes)
 
-Risk: Supabase free tier is 500 MB. Watch `pg_database_size` after every step and stop before about 430 MB (fallback: keep the chronological corpus in Qdrant + BM25 only).
+Risk: Supabase free tier is 500 MB. Watch `pg_database_size` after every step and stop before about 430 MB (fallback: keep the chronological corpus in Qdrant + BM25 only). Measured 22 Nov: 174 MB.
+
+## Phase 12 — Fix before the demo (found 22 Nov)
+
+**Goal:** no known wrong answer on stage, and honest numbers. Evidence: manual runs of 28 questions (with repeats) on `openai/gpt-oss-120b` and the full corpus, spaced 15 s apart.
+
+Wrong answers, highest priority:
+
+- [ ] 12.1 **Wrong programme:** `বয়স্ক ভাতা পাওয়ার যোগ্যতা কী?` is `answered` with the **widow** allowance rules (age, income), merges two versions with different income limits and leaks `(C1)`/`(C2)` into the text.
+- [ ] 12.2 **Meaning reversed:** Call 1 turns the dialect `…টেকা পাইবো নি?` (will they get money?) into `…পাবো না?` (won't get). 120b did the same in the 21 Nov comparison. Retest with 20b and decide the model.
+- [ ] 12.3 **Wrong act:** both lay-off questions cite the EPZ Labour Act for a general worker. Its service requirement differs from Labour Act 2006 §16, so the answer is wrong for most workers.
+- [ ] 12.4 **Wrong section:** `শ্রম আইনের ধারা ১৯` returns §19 of the 2026 Amendment Act instead of the 2006 Act. Naming the act and year works.
+- [ ] 12.5 **Unstable:** the retrenchment question was `answered` once and `partial` twice (entitlements missing, labels leaked). Its Banglish form mixes in the EPZ act.
+- [ ] 12.6 **Core question refused:** `জমির নামজারি করতে কী কী কাগজ লাগে?` → `validation:not_found`.
+- [ ] 12.7 **Dropped or wrong detail:** the probation answer drops the skilled-worker condition on extension, and the GD answer expands জিডি as "ডিজিটাল অভিযোগ". Some answers have citations but no inline markers.
+
+Tooling and trust:
+
+- [ ] 12.8 `warmup.py` and `run_eval.py` don't pass the web client, so their answers differ from the API's.
+- [ ] 12.9 `ingest_jsonl.py` and `ingest_pdf.py` overwrite Qdrant and BM25, then fail in Postgres (73,805 parameters, limit 32,767).
+- [ ] 12.10 A dataset step rebuilds BM25 without admin uploads, and its count check then fails.
+- [ ] 12.11 Compiled guides (400 chunks) are cited as `kind: "official"`, against the grounding rule.
+- [ ] 12.12 Privacy: `normalized_question`, the answer cache and the Tavily query are unredacted. Personal uploads touch disk through temp files.
+- [ ] 12.13 The Postgres health check timed out in 3 of 4 runs (5 s limit; cold connects took up to 4.4 s).
+- [ ] 12.14 Stale UI text: the trace panel says "চারটি বিষয়" and the evaluation table lists four areas. There are five.
+- [ ] 12.15 The English *Rules of Procedure of Parliament* PDF in the DataSet root matches no step and no skip rule: ingest it or list it as skipped.
+- [ ] 12.16 The 2 parser regression tests skip, because they look for PDFs at the pre-DataSet path.
+
+Last, in this order:
+
+- [ ] 12.17 Label the gold set (human task), then `run_eval.py --fresh`
+- [ ] 12.18 `warmup.py`, then rehearse `docs/demo_script.md` with a real microphone
+
+**Done when:** the questions in 12.1–12.7 are answered correctly or safely refused, `results.json` comes from the current corpus and model, and the demo has been rehearsed.
 
 ---
 
@@ -272,11 +315,11 @@ Risk: Supabase free tier is 500 MB. Watch `pg_database_size` after every step an
 | Risk | Mitigation |
 |---|---|
 | Groq 429 or model retirement | Backoff (max 3), answer cache, warm-up pre-cache of demo questions, `LLM_MODEL` in env, and teammates' own Groq accounts as spare keys |
-| Supabase or Qdrant paused after inactivity | `warmup.py` the day before and the morning of the demo; offline docker profile |
-| Weak venue internet | Offline profile (local Postgres and Qdrant), pre-cached answers, phone hotspot. Browser STT also needs internet, so the text box stays usable. |
+| Supabase or Qdrant paused after inactivity | `warmup.py` the day before and the morning of the demo |
+| Weak venue internet | Phone hotspot and pre-cached answers. Local Qdrant is possible but takes hours to prepare (README → Demo day). Browser STT also needs internet, so the text box stays usable. |
 | Whisper weak on Bangla | Browser bn-BD is the default, Whisper only a fallback with a domain-word prompt, and the transcript is always editable |
 | OCR quality on scanned Bangla | Look for a text copy first, try Tesseract then a second engine, compare with `compare_ocr.py`, and mark low-confidence pages `needs_review` |
-| Dataset arrives late or as PDFs | Phase 7 pipeline is ready; ingestion code is shared |
+| Dataset arrives late or as PDFs | Resolved: full DataSet ingested in Phase 11 |
 | Hallucinated numbers | Numeric validator marks the answer `partial` with a warning, and citations come only from stored metadata |
 
 ## Cut list (drop in this order if time runs short)
@@ -290,10 +333,12 @@ Risk: Supabase free tier is 500 MB. Watch `pg_database_size` after every step an
 
 ## Known limitations
 
-- Only the Bangladesh Labour Act 2006 (preamble, §§ 1–20) is ingested. Land, GD and allowance questions are refused until their documents are added, and the wage-payment chapter is missing.
-- The gold set is unlabelled, so Recall@5, MRR and answer coverage aren't measured yet.
-- The Groq free tier throttles at a few answers per minute (≈2.5k tokens each). Back-to-back questions take 15–25 s; rely on the cache and warm-up.
-- The Bijoy converter table is core-only and untested on a real legacy-font PDF. Tesseract isn't installed on the dev laptop; the Surya and PaddleOCR adapters aren't wired.
+- A valid citation is not a correct answer: validation can't tell whether the cited act or programme applies (Phase 12).
+- The gold set is unlabelled, so Recall@5, MRR and answer coverage aren't measured. The saved evaluation predates the full corpus.
+- Sources are not legally reviewed (`unverified` or `needs_review`). Repealed acts are ranked lower, but superseded policies and circulars are not detected.
+- Many citations link to the issuer's home page rather than the document, and some have no link.
+- The Groq free tier throttles at a few answers per minute (≈2.5k tokens each). Uncached answers took 3–29 s on 22 Nov even when spaced 15 s apart; rely on the cache and warm-up.
+- The Bijoy converter table is core-only and not spot-checked on real legacy-font pages. The Surya and PaddleOCR adapters aren't wired.
 - A few glyphs are missing from the bdlaws PDF text layer (e.g. `ং` after some conjuncts: `প্রিন্টি প্রেস`), and some source pages carry their own legacy typos (`পরবতী`). These are kept as in the source.
 - Voice input was checked with a scripted recognizer and Chromium's fake microphone, not yet with a real microphone.
 - Admin jobs and personal documents live in the API process's memory: a restart loses running job status and attached personal documents (by design for personal documents). Run a single API worker.

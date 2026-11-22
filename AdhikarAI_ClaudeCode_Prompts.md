@@ -1,5 +1,7 @@
 # AdhikarAI — Claude Code Prompt Pack
 
+> **Historical (21 Nov 2026): do not re-run these prompts.** They built the first version, and their setup, data and ingest steps are out of date. Some of those commands would overwrite the live indexes. Use `README.md`, `CLAUDE.md` and `plan.md`.
+
 How to use this file:
 
 1. Do the **Before you start** steps yourself (5 minutes).

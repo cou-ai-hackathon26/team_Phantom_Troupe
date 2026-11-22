@@ -3,14 +3,42 @@
 ## FastAPI Backend + Hybrid RAG + Evidence & Trust Layer
 
 **Project:** AdhikarAI\
-**Version:** 1.2 (free cloud stack update)\
-**Prepared:** 21 November 2026\
+**Version:** 1.3 (as-built update)\
+**Prepared:** 21 November 2026, updated 22 November 2026\
 **Architecture:** Python + FastAPI end-to-end backend, Hybrid RAG, LLM
 generation, deterministic verification\
 **Languages:** Bangla (standard Bangla and one regional dialect), Banglish and English\
 **Interaction:** Voice-first input: questions can be spoken or typed; answers are shown as text with citations\
 **Changes in 1.1:** voice input and spoken answers are now must-have; legacy-font (Bijoy) conversion added to PDF ingestion; one regional dialect added; free-tier cost note added. Nothing from 1.0 was removed.\
 **Changes in 1.2:** stack fixed to free services: Supabase (PostgreSQL), Qdrant Cloud free cluster, Groq free tier only for the LLM and the speech-to-text fallback (Whisper); embeddings stay local with `intfloat/multilingual-e5-base`. OCR kept and runs fully locally (Tesseract `ben` first, Surya OCR / EasyOCR / PaddleOCR as the local second engine); no cloud OCR. Text-to-speech (spoken answers) removed on the team's decision; voice input stays must-have. Browser speech recognition explained in Step 0.
+
+**Changes in 1.3:** added the as-built table below and the `general` area; §5, §6.5, §8.1, §12.4, §13, §17 and the demo in §18 now describe the code.
+
+## As built (22 November 2026)
+
+The design sections keep the original intent. Where they differ from this table, the table is what exists.
+
+| Design | Status | As built |
+|---|---|---|
+| Domains (§1, §10 step 3) | changed | `land`, `gd`, `allowance`, `labour`, `general`. No intent labels |
+| Normalization, classification, rewriting (§10 steps 2–4, §11.1–11.2) | changed | one LLM call, `prompts/normalize.md` |
+| Dense + BM25 + RRF (steps 5–7) | built | run in the classified area and across all areas, then fused; exact section list; diversification; repealed acts last |
+| Cross-encoder reranker (step 8) | not built | |
+| Web fallback | added | Tavily over an official-domain allow-list when local evidence is weak |
+| Answer generation (step 10, §11.3) | built | one LLM call, `prompts/answer_bn.md`, `answer_web.md`, `answer_user_doc.md` |
+| Atomic claim extraction (step 11, §11.4) | not built | would break the 2-call limit |
+| Citation validation (step 12) | partly | labels and numbers are checked. Applicability, quotes, page ranges and versions are not |
+| Trust statuses (step 13) | changed | `answered`, `partial`, `refused`, `clarify` |
+| Conflict and outdated-source detection (§6.4, §12.3) | not built | only a repealed-act ranking penalty |
+| Voice (step 0) | built | continuous listening with a silence stop, bn/en switch, Whisper fallback (also for Brave) |
+| OCR (§7.2) | built | Tesseract, then EasyOCR. Surya, PaddleOCR and Docling are not wired |
+| Human source review (§6.3, §7.7) | not done | every source is `unverified` or `needs_review` |
+| Admin panel, personal documents | added | `/admin`, `/user-docs` |
+| API rate limiting (§16) | not built | |
+| PII redaction (§16) | partly | raw messages are filtered; normalized questions are not |
+| Evaluation (§15) | partly | runner built; gold set unlabelled |
+| Redis | not used | answer cache in Postgres and process memory |
+| Frontend | changed | Next.js App Router, TypeScript, Tailwind, shadcn/ui |
 
 ------------------------------------------------------------------------
 
@@ -31,6 +59,8 @@ Initial knowledge domains:
     district/thana service information.
 4.  **Social allowances:** Old-age, widow/deserted-women and disability
     allowance policies and current notices.
+5.  **General:** every other Bangladesh law (bdlaws Chronological Index,
+    Constitution, NHRC, other DSS acts).
 
 This version does **not** use Jev. It uses conventional, inspectable
 components:
@@ -219,7 +249,7 @@ requires it.
   Legacy font             Bijoy/SutonnyMJ to      Fix garbled text from
   conversion              Unicode converter       old-font Bangla PDFs
 
-  Frontend                React + TypeScript      Chat UI, citation
+  Frontend                Next.js + TypeScript    Chat UI, citation
                                                   viewer and feedback
 
   Deployment              Docker Compose          Reproducible local/demo
@@ -266,103 +296,46 @@ any service.
 # 5. Repository structure
 
 ``` text
-adhikarai/
+AdhikarAI/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── api/
-│   │   │   ├── routes/
-│   │   │   │   ├── chat.py
-│   │   │   │   ├── voice.py
-│   │   │   │   ├── feedback.py
-│   │   │   │   ├── sources.py
-│   │   │   │   ├── health.py
-│   │   │   │   └── admin.py
-│   │   │   └── dependencies.py
-│   │   ├── core/
-│   │   │   ├── config.py
-│   │   │   ├── logging.py
-│   │   │   ├── security.py
-│   │   │   └── exceptions.py
-│   │   ├── schemas/
-│   │   │   ├── chat.py
-│   │   │   ├── voice.py
-│   │   │   ├── source.py
-│   │   │   ├── retrieval.py
-│   │   │   └── feedback.py
-│   │   ├── services/
-│   │   │   ├── orchestrator.py
-│   │   │   ├── stt_service.py
-│   │   │   ├── audio_utils.py
-│   │   │   ├── query_normalizer.py
-│   │   │   ├── intent_classifier.py
-│   │   │   ├── query_rewriter.py
-│   │   │   ├── retrieval_service.py
-│   │   │   ├── fusion_service.py
-│   │   │   ├── reranker_service.py
-│   │   │   ├── context_builder.py
-│   │   │   ├── generation_service.py
-│   │   │   ├── claim_extractor.py
-│   │   │   ├── citation_validator.py
-│   │   │   └── trust_policy.py
-│   │   ├── ingestion/
-│   │   │   ├── source_collector.py
-│   │   │   ├── source_validator.py
-│   │   │   ├── pdf_parser.py
-│   │   │   ├── html_parser.py
-│   │   │   ├── ocr_service.py
-│   │   │   ├── legacy_font_converter.py
-│   │   │   ├── cleaner.py
-│   │   │   ├── structure_parser.py
-│   │   │   ├── chunker.py
-│   │   │   ├── embedder.py
-│   │   │   └── indexer.py
-│   │   ├── models/
-│   │   │   ├── llm_client.py
-│   │   │   └── embedding_client.py
-│   │   ├── repositories/
-│   │   │   ├── document_repository.py
-│   │   │   ├── chunk_repository.py
-│   │   │   ├── qdrant_repository.py
-│   │   │   └── bm25_repository.py
-│   │   ├── prompts/
-│   │   │   ├── answer_bn.md
-│   │   │   ├── query_rewrite.md
-│   │   │   └── claim_extraction.md
-│   │   └── evaluation/
-│   │       ├── dataset.py
-│   │       ├── retrieval_metrics.py
-│   │       ├── answer_metrics.py
-│   │       └── run_eval.py
-│   ├── tests/
-│   │   ├── unit/
-│   │   ├── integration/
-│   │   └── evaluation/
-│   ├── scripts/
-│   │   ├── ingest_documents.py
-│   │   ├── rebuild_qdrant.py
-│   │   └── run_benchmark.py
-│   ├── requirements.txt
+│   │   │   ├── dependencies.py
+│   │   │   └── routes/      admin, admin_auth, chat, evaluation, feedback, health, sources, user_docs, voice
+│   │   ├── core/            config, constants, logging, security
+│   │   ├── db/              models, session
+│   │   ├── schemas/         chat, ingestion, llm, source
+│   │   ├── services/        orchestrator, query_normalizer, trust_policy, retrieval_service, fusion_service,
+│   │   │                    web_search, generation_service, citation_validator, answer_cache, query_log,
+│   │   │                    stt_service, audio_utils, user_docs, knowledge_admin, admin_users,
+│   │   │                    health_service, pagination
+│   │   ├── ingestion/       dataset_sources, dataset_indexer, sqlite_laws, markdown_parser, bdlaws_parser,
+│   │   │                    generic_parser, pdf_parser, ocr_service, legacy_font_converter, text_repair,
+│   │   │                    text_normalizer, chunker, embedder, indexer, pipeline, jsonl_loader,
+│   │   │                    area_map, source_registry, upload_text
+│   │   ├── models/          llm_client, embedding_client
+│   │   ├── repositories/    qdrant_repository, bm25_repository
+│   │   ├── prompts/         normalize.md, answer_bn.md, answer_web.md, answer_user_doc.md
+│   │   └── evaluation/      answer_metrics, retrieval_metrics
+│   ├── scripts/             ingest_dataset, warmup, run_eval and other CLIs (see README)
+│   ├── tests/unit/
+│   ├── requirements.in, requirements.txt
 │   └── Dockerfile
-├── frontend/
+├── frontend/                app/ (/, about, sources, admin), components/, hooks/, lib/
 ├── data/
-│   ├── originals/
-│   │   ├── 01_workers/
-│   │   ├── 02_land/
-│   │   ├── 03_police/
-│   │   └── 04_allowances/
-│   ├── parsed/
-│   ├── processed/
+│   ├── DataSet/             source corpus (not in git)
+│   ├── processed/           sections, chunk cache, step markers (not in git)
+│   ├── index/bm25.pkl       (not in git)
+│   ├── ocr/                 OCR cache (not in git)
+│   ├── originals/           uploaded originals
 │   ├── evaluation/
+│   ├── dataset_registry.json
 │   └── sources_log.csv
-├── infra/
-│   └── docker-compose.yml
-├── docs/
-│   ├── architecture.md
-│   ├── data-policy.md
-│   └── evaluation-report.md
-├── .env.example
-└── README.md
+├── infra/docker-compose.yml
+├── docs/                    pipeline.md, demo_script.md
+├── plan.md, CLAUDE.md, README.md
+└── .env.example
 ```
 
 ------------------------------------------------------------------------
@@ -468,16 +441,22 @@ downloaded file is legally consolidated.
 For annual allowances and fees, store fiscal year or effective period.
 Do not present an older amount as current.
 
-## 6.5 Data already prepared
+## 6.5 Ingested data
 
-The team already has cleaned, section-level JSONL files (442 entries)
-for the Labour Act 2006 (full, up to the 2026 amendment), the Land
-Development Tax Act 2023, the Land Crimes Prevention Act 2023, the
-namjari sections of the State Acquisition and Tenancy Act 1950, the GD
-citizen charter and the three DSS allowance pages (FY 2026--27). Load
-these as derived sources linked to their original URLs, and run new PDFs
-through the ingestion pipeline below. Known gap: disability allowance
-eligibility rules (the 2025 implementation policy PDF).
+The team supplied `data/DataSet/` instead of the 442-entry JSONL planned
+in v1.2. It is ingested by `scripts/ingest_dataset.py` in 26 steps.
+
+| Area | Chunks | Main sources |
+|---|---:|---|
+| `land` | 4,048 | Ministry of Land acts, rules, policies and portal pages; land acts from the bdlaws index |
+| `gd` | 1,376 | Online GD manual, Bangladesh Police documents; police acts from the bdlaws index |
+| `allowance` | 1,426 | Department of Social Services allowance documents and pages |
+| `labour` | 1,369 | Labour Act 2006, Amendment Act 2026, other labour acts from the bdlaws index |
+| `general` | 65,586 | Constitution, bdlaws Chronological Index (1799–2026), NHRC, other DSS documents |
+| **Total** | **73,805** | **1,927 documents** |
+
+Known gaps: no legal review, no detection of superseded policies, and 400
+chunks come from compiled guides rather than official publications.
 
 ------------------------------------------------------------------------
 
@@ -642,39 +621,19 @@ unverified, and a human can locate the evidence on the original page.
 
 ## 8.1 PostgreSQL tables
 
-### `documents`
+Defined in `backend/app/db/models.py`.
 
-`id`, `title`, `issuer`, `domain`, `source_url`, `publication_date`,
-`effective_from`, `effective_to`, `version_status`, `sha256`,
-`original_file_path`, `downloaded_at`, `review_status`.
+| Table | Columns |
+|---|---|
+| `documents` | `id`, `title`, `area`, `issuer`, `source_url`, `source_file`, `language`, `review_status`, `created_at` |
+| `chunks` | `id`, `document_id`, `area`, `act`, `chapter`, `section`, `title`, `citation`, `part`, `text`, `normalized_text`, `token_count`, `notes`, `source_url`, `page_start`, `page_end`, `qdrant_point_id`, `created_at` |
+| `query_logs` | `id`, `created_at`, `message`, `normalized_question`, `area`, `status`, `retrieved_chunk_ids`, `best_dense_score`, `latency_ms`, `llm_calls`, `cached`, `model` |
+| `feedback` | `id`, `query_log_id`, `rating`, `comment`, `created_at` |
+| `answer_cache` | `key`, `response_json`, `created_at` |
+| `admin_users` | `id`, `email`, `password_hash`, `created_at`, `last_login_at` |
 
-### `document_relations`
-
-`id`, `source_document_id`, `target_document_id`, `relation_type`,
-`review_note`, `reviewed_by`.
-
-### `chunks`
-
-`id`, `document_id`, `section`, `chapter`, `page_start`, `page_end`,
-`language`, `text`, `normalized_text`, `qdrant_point_id`,
-`extraction_quality`.
-
-### `query_logs`
-
-`id`, `request_id`, `created_at`, `query_text` (subject to privacy
-policy), `detected_language`, `detected_domain`, `retrieved_chunk_ids`,
-`answer_status`, `latency_ms`, `model_versions`.
-
-### `feedback`
-
-`id`, `query_log_id`, `rating`, `issue_type`, `comment`,
-`review_status`.
-
-### `evaluation_cases`
-
-`id`, `question`, `domain`, `expected_document_ids`,
-`expected_sections`, `expected_answer_points`, `language_variant`,
-`should_abstain`, `reviewer`.
+Document relations and evaluation cases have no tables. Evaluation cases
+live in `data/evaluation/gold.jsonl`.
 
 ## 8.2 Qdrant
 
@@ -1075,10 +1034,8 @@ If legal precedence is unclear, mark `SOURCE_CONFLICT` or
 
 ## 12.4 Safe abstention
 
-> এই বিষয়ে পাওয়া সরকারি নথিগুলো থেকে নিশ্চিত উত্তর দেওয়ার মতো যথেষ্ট তথ্য
-> পাওয়া যায়নি। ভুল তথ্য দেওয়ার ঝুঁকি এড়াতে আমি নির্দিষ্ট নিয়ম বা ফি অনুমান করে
-> বলছি না। সংশ্লিষ্ট সরকারি অফিস বা প্রকাশিত সর্বশেষ নির্দেশনায় বিষয়টি নিশ্চিত
-> করুন।
+Return `REFUSAL_TEXT` from `backend/app/core/constants.py`, word for word.
+It is not repeated here, so that it has one definition.
 
 If one missing detail can make the query answerable, ask a short
 clarification instead of refusing immediately.
@@ -1089,187 +1046,68 @@ clarification instead of refusing immediately.
 
 ## 13.1 API endpoints
 
-  ---------------------------------------------------------------------------------
-  Endpoint                          Method                  Purpose
-  --------------------------------- ----------------------- -----------------------
-  `/api/v1/chat`                    POST                    Ask AdhikarAI
+All under `/api/v1`. Request and response details are in `README.md` → API,
+and live at `/docs` on the running API.
 
-  `/api/v1/chat/voice`              POST                    Ask by voice (audio upload)
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/chat` | POST | ask a question |
+| `/chat/voice/transcribe` | POST | audio to text |
+| `/chat/voice` | POST | audio to answer |
+| `/sources`, `/sources/documents/{id}`, `/sources/{chunk_id}` | GET | browse sources |
+| `/user-docs` | POST | attach a personal document |
+| `/user-docs/{id}` | GET, DELETE | inspect or remove it |
+| `/feedback` | POST | rate an answer |
+| `/health` | GET | service status |
+| `/eval/latest` | GET | last saved evaluation |
+| `/admin/login` | POST | admin session token |
+| `/admin/check` | GET | check the session |
+| `/admin/documents` | GET, POST | list, upload |
+| `/admin/documents/{id}` | GET, DELETE | inspect, delete |
+| `/admin/jobs`, `/admin/jobs/{id}` | GET | ingestion jobs |
 
-  `/api/v1/feedback`                POST                    Submit feedback
-
-  `/api/v1/sources/{document_id}`   GET                     View verified source
-                                                            metadata
-
-  `/api/v1/health`                  GET                     Health check
-
-  `/api/v1/admin/documents`         GET                     Review document
-                                                            registry
-
-  `/api/v1/admin/ingestion`         POST                    Trigger protected
-                                                            ingestion
-
-  `/api/v1/admin/evaluation`        POST                    Run evaluation
-  ---------------------------------------------------------------------------------
-
-Admin endpoints require authentication and authorization. Do not expose
-ingestion or evaluation controls to public users.
+`/admin/*` other than login requires a Bearer token. `/eval/latest` is public.
 
 ## 13.2 Request schema
 
-``` python
-from pydantic import BaseModel, Field
-from typing import Literal
-
-class ChatRequest(BaseModel):
-    message: str = Field(min_length=2, max_length=4000)
-    language_preference: Literal["bn", "en", "auto"] = "auto"
-    conversation_id: str | None = None
-```
+`ChatRequest` in `backend/app/schemas/chat.py`: `message` (2–2000
+characters), optional `area`, `debug`, optional `user_doc_id`.
 
 ## 13.3 Response schema
 
-``` python
-from pydantic import BaseModel
-from typing import Literal
+`ChatResponse` in the same file: `status`, `answer`, `citations[]`,
+`normalized_question`, `area`, `warnings[]`, `trace`, `latency_ms`,
+`cached`, `request_id`. A citation has `marker`, `kind`
+(official, user, web), `chunk_id`, `act`, `section`, `title`, `citation`,
+`excerpt`, `source_url` and `notes`.
 
-class Citation(BaseModel):
-    document_id: str
-    chunk_id: str
-    title: str
-    section: str | None = None
-    page_start: int
-    page_end: int
-    source_url: str
+## 13.4 Routes
 
-class ChatResponse(BaseModel):
-    answer: str
-    domain: str
-    status: Literal[
-        "SUPPORTED",
-        "PARTIALLY_SUPPORTED",
-        "INSUFFICIENT_EVIDENCE",
-        "SOURCE_CONFLICT",
-        "OUTDATED_SOURCE",
-        "NEEDS_HUMAN_REVIEW"
-    ]
-    citations: list[Citation]
-    limitations: list[str]
-    needs_human_review: bool
-    request_id: str
-```
-
-## 13.4 Route skeleton
-
-``` python
-from fastapi import APIRouter, Depends
-from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.orchestrator import AdhikarAIOrchestrator
-
-router = APIRouter()
-
-@router.post("/chat", response_model=ChatResponse)
-async def chat(
-    request: ChatRequest,
-    orchestrator: AdhikarAIOrchestrator = Depends(get_orchestrator),
-):
-    return await orchestrator.run(request)
-```
-
-Define `get_orchestrator` in the dependency module. Keep route handlers
-thin; business logic belongs in services.
+Route handlers stay thin and call `services/orchestrator.py`, which is
+built in `api/dependencies.py`.
 
 ## 13.4a Voice endpoints
 
-``` python
-from fastapi import APIRouter, Depends, File, UploadFile
-from app.schemas.chat import ChatRequest, ChatResponse
+`api/routes/voice.py` calls `services/stt_service.py`: ffmpeg to 16 kHz
+mono WAV, silence check, Groq Whisper (`language` bn or en), prompt-echo
+guard. Audio temp files are deleted.
 
-router = APIRouter()
+## 13.5 Orchestration
 
-class VoiceChatResponse(ChatResponse):
-    transcript: str
-
-@router.post("/chat/voice", response_model=VoiceChatResponse)
-async def chat_voice(
-    audio: UploadFile = File(...),
-    stt=Depends(get_stt_service),
-    orchestrator=Depends(get_orchestrator),
-):
-    transcript = await stt.transcribe(audio)        # ffmpeg -> WAV -> Groq Whisper
-    result = await orchestrator.run(ChatRequest(message=transcript))
-    return VoiceChatResponse(**result.model_dump(), transcript=transcript)
+``` text
+cache(raw question)
+  -> Call 1: normalize, classify, search query
+  -> pre gate: refuse | clarify | continue
+  -> cache(normalized question)
+  -> retrieve in area + in all areas, fuse, top 5
+  -> score gate; web fallback if evidence is weak
+  -> Call 2: grounded answer
+  -> validate labels and numbers
+  -> log; cache unless refused
 ```
 
-Groq Whisper call inside `stt_service.py` (key read from `.env`, never
-hard-coded):
-
-``` python
-from groq import AsyncGroq
-from app.core.config import settings
-
-client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-DOMAIN_WORDS = "নামজারি, খতিয়ান, খাজনা, জিডি, থানা, বয়স্ক ভাতা, বিধবা ভাতা, প্রতিবন্ধী ভাতা, শ্রম আইন"
-
-async def transcribe_wav(path: str) -> str:
-    with open(path, "rb") as f:
-        result = await client.audio.transcriptions.create(
-            file=(path, f.read()),
-            model=settings.STT_MODEL,      # whisper-large-v3
-            language="bn",
-            temperature=0,
-            prompt=DOMAIN_WORDS,
-            response_format="json",
-        )
-    return result.text.strip()
-```
-
-This is a skeleton: add size limits for uploads, timeouts and tests.
-
-## 13.5 Orchestrator pseudocode
-
-``` python
-class AdhikarAIOrchestrator:
-    async def run(self, request):
-        query = normalize_query(request.message)
-        intent = await classify_intent(query)
-
-        if intent.requires_clarification:
-            return clarification_response(intent)
-
-        queries = await rewrite_query(query, intent)
-
-        dense_results = await dense_search(queries, intent)
-        sparse_results = await sparse_search(queries, intent)
-
-        candidates = reciprocal_rank_fusion(
-            dense_results,
-            sparse_results
-        )
-
-        ranked = await optional_rerank(query, candidates)
-        evidence = build_evidence_context(ranked)
-
-        if not evidence.is_sufficient:
-            return abstention_response(evidence)
-
-        draft = await generate_grounded_answer(query, evidence)
-        claims = await extract_claims(draft)
-
-        validation = validate_claims_and_citations(
-            claims=claims,
-            evidence=evidence
-        )
-
-        return apply_trust_policy(
-            draft=draft,
-            validation=validation,
-            evidence=evidence
-        )
-```
-
-This is architectural pseudocode. Implement typed interfaces,
-exceptions, async timeouts and tests before production use.
+With a personal document the cache and the pre-answer refusals are
+skipped and the web fallback is never used.
 
 ------------------------------------------------------------------------
 
@@ -1382,83 +1220,19 @@ Groq 429 (rate-limit) counts.
 
 # 17. Deployment architecture
 
-## 17.1 Docker Compose starting point
+## 17.1 Docker Compose
 
-``` yaml
-# Default: only the API runs locally; PostgreSQL is Supabase and the
-# vector database is Qdrant Cloud (URLs and keys in .env).
-# Offline fallback: `docker compose --profile offline up` starts local
-# PostgreSQL and Qdrant; point DATABASE_URL / QDRANT_URL at them.
-services:
-  api:
-    build: ./backend
-    env_file: .env
-    ports:
-      - "8000:8000"
-
-  postgres:
-    profiles: ["offline"]
-    image: postgres:16
-    environment:
-      POSTGRES_DB: adhikarai
-      POSTGRES_USER: adhikarai
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  qdrant:
-    profiles: ["offline"]
-    image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
-
-volumes:
-  postgres_data:
-  qdrant_data:
-```
-
-For real deployment, pin tested image versions, use strong secrets,
-restrict database ports, configure persistent backups and put the API
-behind a reverse proxy. This is a local development starting point, not
-a hardened production configuration.
+`infra/docker-compose.yml` defines the API and an `offline` profile with
+Postgres and Qdrant. The normal setup runs the API directly with Uvicorn
+against Supabase and Qdrant Cloud. The offline profile is unrehearsed and
+its limits are in `README.md` → Demo day. This is a development setup,
+not a hardened production configuration.
 
 ## 17.2 Environment variables
 
-``` env
-APP_ENV=development
-APP_SECRET_KEY=replace_me
-# Supabase: Project Settings -> Database -> connection string
-DATABASE_URL=postgresql+asyncpg://postgres.<project-ref>:<password>@<supabase-host>:5432/postgres
-# Qdrant Cloud: cluster URL and API key from the Qdrant dashboard
-QDRANT_URL=https://<cluster-id>.<region>.cloud.qdrant.io:6333
-QDRANT_API_KEY=replace_me
-QDRANT_COLLECTION=adhikarai_chunks
-
-# Groq (free tier, no card): one key from console.groq.com
-GROQ_API_KEY=replace_me
-LLM_PROVIDER=groq
-LLM_MODEL=replace_me          # pick from console Models page after Bangla tests
-STT_PROVIDER=browser          # fallback: groq_whisper
-STT_MODEL=whisper-large-v3
-
-# OCR runs locally, no API
-OCR_PROVIDER=tesseract        # lang ben+eng
-OCR_SECOND_ENGINE=surya       # or easyocr / paddleocr, chosen by page tests
-OCR_DEVICE=cuda               # or cpu
-OCR_MIN_CONFIDENCE=70
-
-EMBEDDING_PROVIDER=local
-EMBEDDING_MODEL=intfloat/multilingual-e5-base
-EMBEDDING_DIM=768
-
-LOG_LEVEL=INFO
-```
-
-Never commit real values. Add `.env` to `.gitignore`, never paste keys
-into chat or code, and use deployment environment variables or a secret
-manager outside local development.
+`.env.example` is the list of variable names and
+`backend/app/core/config.py` holds the defaults. Never commit real values,
+paste keys into chat or put them in code.
 
 ------------------------------------------------------------------------
 
@@ -1503,25 +1277,16 @@ manager outside local development.
 -   Predicting legal outcomes.
 -   Individualized legal advice.
 
-## Suggested live demo
+## Live demo
 
-1.  Ask by voice in colloquial Bangla: "আমার মালিক দুই মাসের বেতন দেয় নাই, কী
-    করব?"
-2.  Show detected Workers domain.
-3.  Show dense and BM25 results.
-4.  Show fused / reranked evidence.
-5.  Generate a simple Bangla answer on screen.
-6.  Open the cited official document and page.
-7.  Ask a question absent from the corpus.
-8.  Demonstrate safe abstention.
-9.  Show retrieval and citation evaluation results.
-
-This demonstrates data preparation, retrieval, generation, verification
-and evaluation---not merely a chatbot.
+See `docs/demo_script.md`. It lists the tested questions and the ones not
+to demo yet.
 
 ------------------------------------------------------------------------
 
 # 19. Development roadmap
+
+This is the original roadmap. Actual progress is tracked in `plan.md`.
 
 ## Phase 0 --- source readiness
 

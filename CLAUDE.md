@@ -24,7 +24,7 @@ It is defined once, as `REFUSAL_TEXT` in `backend/app/core/constants.py`. Never 
 
 **Web fallback (added 22 Nov, `WEB_FALLBACK`):** when local evidence is weak (score gate refuses, or best dense score below `WEB_TRIGGER_SCORE`), `services/web_search.py` searches Tavily, keeps only hosts in `WEB_ALLOWED_DOMAINS` (official sites), and Call 2 gets those passages as `[W…]` next to local `[C…]`. Still at most 2 LLM calls. Web citations have `kind: "web"`, a source URL and a "verify on the linked page" warning. Never used for personal-document questions; only Call 1's `search_query` is sent. Set `WEB_FALLBACK=false` for offline demos.
 
-Spec: `docs/pipeline.md` (architecture v1.2). Build plan and progress: `plan.md`. Where the two disagree, the rules in this file win (area codes, refusal text, the 2-call limit, Next.js).
+Spec: `docs/pipeline.md` (architecture v1.3; its "As built" table says what exists). Build plan and progress: `plan.md`. Where the two disagree, the rules in this file win (area codes, refusal text, the 2-call limit, Next.js).
 
 ## Stack (fixed, all free; never anything that needs a payment card)
 
@@ -66,14 +66,15 @@ pytest                                      # all tests (LLM/network/DB mocked; 
 pytest tests/unit/test_chunker.py::test_short_section_unchanged   # one test
 ruff check . && ruff format .               # lint + format (line length 120)
 python scripts/check_connections.py         # OK/FAIL for Postgres, Qdrant, Groq
-python scripts/convert_pdfs.py              # registered PDF folders -> data/processed/*.jsonl + all_documents.jsonl
 python scripts/create_tables.py             # Supabase tables (idempotent)
-python scripts/ingest_jsonl.py              # all_documents.jsonl -> chunks -> Postgres + Qdrant + BM25 (idempotent)
-python scripts/ingest_pdf.py f.pdf --area gd --title "…"   # new PDF end to end (bdlaws or generic/legacy/OCR)
+python scripts/ingest_dataset.py --list     # data/DataSet steps, done/pending
+python scripts/ingest_dataset.py --status   # chunk counts in every store
+python scripts/ingest_dataset.py --step land-laws   # re-index one step (writes to the live stores)
+python scripts/ingest_dataset.py --resume   # run pending steps, resumable
 python scripts/try_retrieval.py "প্রশ্ন" --area labour       # inspect hybrid retrieval
 python scripts/eval_retrieval.py            # dense vs BM25 vs hybrid on retrieval_seed.jsonl
 python scripts/test_llm_models.py openai/gpt-oss-20b --with-answer   # compare Groq models
-python scripts/run_eval.py                  # full pipeline on gold.jsonl -> data/evaluation/results.json
+python scripts/run_eval.py --fresh          # full pipeline (no web fallback) on gold.jsonl -> data/evaluation/results.json
 python scripts/warmup.py                    # wake DBs, load e5, pre-cache docs/demo_script.md questions
 python scripts/create_admin.py you@example.com   # create admin / reset password (asks for it)
 python scripts/compare_ocr.py scan.pdf --pages 1-3
@@ -84,23 +85,27 @@ cd frontend && npm install && npm run dev   # http://localhost:3000, uses NEXT_P
 npm run build && npm run lint
 ```
 
+**Dangerous on the live stores:** `ingest_jsonl.py`, and `ingest_pdf.py` without `--no-index`, re-embed all 73,805 chunks, overwrite Qdrant and BM25, then fail in Postgres (over asyncpg's 32,767-parameter limit). `ingest_dataset.py --wipe --yes` deletes everything. Add single documents through `/admin`.
+
 ## Architecture
 
 ```
 question ─► cache(raw) ─► Call 1 normalize/classify (query_normalizer) ─► pre gate (off-topic & area unknown → refuse; clarify)
-        ─► cache(normalized) ─► dense (Qdrant, e5 "query:") + BM25 + exact "ধারা N" list ─► RRF top 5
-           (no candidates in the classified area → retry all areas) ─► score gate (RETRIEVAL_MIN_SCORE)
-        ─► Call 2 grounded answer citing [C1]…[C5] (generation_service)
+        ─► cache(normalized) ─► retrieve twice (classified area + all areas; once if the caller fixed the area):
+           dense (Qdrant, e5 "query:") + BM25 + exact "ধারা/অনুচ্ছেদ N" list ─► RRF, diversify, repealed last ─► top 5
+        ─► score gate (RETRIEVAL_MIN_SCORE) + web fallback when evidence is weak
+        ─► Call 2 grounded answer citing [C…] / [W…] / [U…] (generation_service)
         ─► citation_validator (labels ∈ retrieved; every number, compared by value, ∈ cited chunks; markers → [১])
-        ─► status answered | partial | refused | clarify  ─► query_logs + answer cache
+        ─► status answered | partial | refused | clarify  ─► query_logs + answer cache (refusals are never cached)
 ```
 
-- **Layers:** `api/routes` call `services/orchestrator.py`. `repositories/` wrap Qdrant and BM25 (Postgres via `db/`). `models/` holds the Groq and embedding clients. `ingestion/` is offline only; `ingestion/pipeline.py` is the shared ingest core.
+- **Layers:** `api/routes` call `services/orchestrator.py`. `repositories/` wrap Qdrant and BM25 (Postgres via `db/`). `models/` holds the Groq and embedding clients. `ingestion/` is offline only; `ingestion/dataset_indexer.py` is the per-step ingest core (`pipeline.py` is the legacy full rebuild).
 - **Indexes:** Postgres `chunks` is the canonical store. Qdrant point IDs are deterministic UUIDv5 values from chunk IDs, so re-ingesting never duplicates. The BM25 pickle (`data/index/bm25.pkl`) carries chunk metadata too, so retrieval, `/sources` and citations work from it at runtime. Chunk counts must match across all three stores.
 - **bdlaws PDFs:** PyMuPDF splits Bangla words at conjunct glyphs into separate "lines" on one visual row. `pdf_parser.extract_rows` rebuilds rows (glyphs from `words`, spaces from `rawdict`). `bdlaws_parser` separates margin titles (x0<120, narrow), footnotes (ASCII-numbered → `notes`) and body. `text_repair` fixes doubled vowel signs and Bijoy leftovers. Never use `\d` for these patterns, because it matches Bangla digits.
-- **Sources:** register new sources in `ingestion/area_map.py` (PDF folders) or via `ingest_pdf.py` (`data/sources_registry.json`, `data/sources_log.csv`, originals in `data/originals/<area>/`).
+- **Sources:** built-in sources are steps in `ingestion/dataset_sources.py` (`data/dataset_registry.json`; `area_map.PDF_FOLDERS` is empty, so `convert_pdfs.py` is legacy). Admin uploads are recorded in `data/sources_registry.json` and `data/sources_log.csv`, with originals in `data/originals/<area>/`.
 - **Citations:** built from stored chunk metadata, never from LLM text.
-- **LLM:** `openai/gpt-oss-20b` won the comparison (correct dialect and Banglish normalization, faithful numbers). The free tier throttles at a few answers per minute (≈2.5k tokens per answer), so space out evaluation runs (`--sleep 15`) and rely on the cache and `warmup.py` for demos.
-- **Admin panel:** `/admin` (frontend) with `api/routes/admin.py`. Admins log in with email and password (`admin_users` table, scrypt hashes; `api/routes/admin_auth.py`) and get an HMAC session token signed with `APP_SECRET_KEY` (`core/security.py`). `ADMIN_TOKEN` is an optional static key. Create admins with `scripts/create_admin.py`; never put credentials in code or docs. `services/knowledge_admin.py` ingests uploads as background jobs, one at a time. Only the new document is embedded; BM25 is rebuilt and swapped in place via `Retriever.replace_index`; every change clears the answer cache. Built-in documents (`area_map.PDF_FOLDERS`) can't be deleted from the panel.
-- **Personal documents:** `/user-docs` plus `services/user_docs.py`. Kept in process memory only (TTL `USER_DOC_TTL_MINUTES`) and **never** embedded, indexed, cached, logged or written to disk. With `user_doc_id`, the orchestrator labels user passages `[U…]` next to official `[C…]`, skips the cache and the pre-answer refusals, and citations get `kind: "user"`.
-- **Data status:** only the Labour Act 2006 (preamble and §§1–20) is ingested, from 21 bdlaws PDFs in `data/Workers — Bangladesh Labour Act 2006/`. Land, GD and allowance questions are refused until their documents are added.
+- **LLM:** on 22 Nov `.env` runs `openai/gpt-oss-120b`, pending a team decision. `openai/gpt-oss-20b` won the 21 Nov comparison (correct dialect and Banglish normalization, faithful numbers). The free tier throttles at a few answers per minute (≈2.5k tokens per answer), so space out evaluation runs (`--sleep 15`) and rely on the cache and `warmup.py` for demos.
+- **Admin panel:** `/admin` (frontend) with `api/routes/admin.py`. Admins log in with email and password (`admin_users` table, scrypt hashes; `api/routes/admin_auth.py`) and get an HMAC session token signed with `APP_SECRET_KEY` (`core/security.py`). `ADMIN_TOKEN` is an optional static key. Create admins with `scripts/create_admin.py`; never put credentials in code or docs. `services/knowledge_admin.py` ingests uploads as background jobs, one at a time. Only the new document is embedded; BM25 is rebuilt and swapped in place via `Retriever.replace_index`; every change clears the answer cache. Built-in documents (`data/dataset_registry.json`) can't be deleted from the panel. Uploads are not in the dataset chunk cache, so a later dataset step drops them from BM25.
+- **Personal documents:** `/user-docs` plus `services/user_docs.py`. Kept in process memory only (TTL `USER_DOC_TTL_MINUTES`) and **never** embedded, indexed, cached, logged or written to disk. With `user_doc_id`, the orchestrator labels user passages `[U…]` next to official `[C…]`, skips the cache and the pre-answer refusals, and citations get `kind: "user"`. **Known violation of "never written to disk":** Starlette spools uploads over 1 MB, and PDF extraction and Tesseract use temp files.
+- **Data status (22 Nov):** all 26 DataSet steps are ingested: 1,927 documents, 73,805 chunks in each store (land 4,048; gd 1,376; allowance 1,426; labour 1,369; general 65,586). 400 chunks are compiled guides, not official text, but are cited as `kind: "official"`.
+- **Open defects:** see `plan.md` Phase 12 before touching retrieval, prompts or the demo. `warmup.py` and `run_eval.py` build the orchestrator without the web client, so they differ from the API.
