@@ -137,16 +137,6 @@ flowchart LR
 - **Dialect normalization** (`scripts/eval_normalization.py`, 38 questions, 10 dialects): fully correct rewrites went from **21/38 to 34/38** after the dialect guide and code glossary, with **no reversed meanings** left (`plan.md` Phase 14). The test questions still need review by native speakers.
 - **Retrieval and answer accuracy are not measured yet**: the 24-question gold set (`data/evaluation/gold.jsonl`) waits for human labels.
 
-## Current limitations
-
-AdhikarAI is a prototype and is not legal advice. In manual checks on 22 Nov 2026:
-
-- It can **cite a real document that is the wrong one for the question**: the widow-allowance rules for an old-age allowance question, or the EPZ Labour Act for a general worker. Validation checks that citations and numbers come from retrieved text. It does not check that the text applies.
-- Dialects: a code glossary plus a dialect guide in the prompt brought Call 1 from 21/38 to 34/38 fully correct on a 38-question, 10-dialect test set (no reversed meanings left), but the set is not yet reviewed by native speakers, and past negatives are still sometimes misread.
-- The common namjari-documents question was refused, although land documents are indexed.
-- Retrieval and answer accuracy are unmeasured, because the gold set is not labelled yet.
-
-The full list is in [`plan.md`](plan.md#known-limitations).
 
 ## Run it
 
