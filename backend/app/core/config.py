@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     log_level: str = "INFO"
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # Supabase PostgreSQL (session pooler URL with +asyncpg)
     database_url: SecretStr | None = None
