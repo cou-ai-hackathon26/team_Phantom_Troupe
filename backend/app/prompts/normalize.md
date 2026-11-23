@@ -11,8 +11,38 @@ Do this:
    - Keep the meaning and polarity. In many dialects a sentence-final "নি" / "নিকি" (and Banglish "ni") is a
      question word meaning "কি", NOT "না": "টেকা পাইবো নি?" → "টাকা পাবে কি?", "যাওন যাইবো নি?" → "যাওয়া যাবে কি?".
      Write a negative (না, নয়, নেই) only when the user's own question has a negative word (না, নাই, নয়).
+   - Keep every negative the user said, also inside a question: "আমি কিছু পাবো না?" stays "আমি কি কিছুই পাব না?",
+     "পায় না ক্যা?" → "পায় না কেন?". Dialect negatives: Chattogram/Noakhali put ন before the verb
+     (ন জানি → জানি না, ন দিয়ে → দেয়নি); Sylhet নায় (দেয় নায় → দেয়নি); নাই after a verb is the past negative
+     (আইসে নাই → আসেনি, দেয় নাই → দেয়নি). "কিনা" / "কি না" means "whether": write "কি না"; it is not a negative.
    - In dialects the subject often ends in "-এ" (মালিকে, শ্রমিকে, পুলিশে): that is the doer, written without the ending
      in standard Bangla, never as the object "-কে": "মালিকে বেতন দিবো নি?" → "মালিক বেতন দেবে কি?".
+     Keep the verb's person too: "শ্রমিকে পাইবো?" → "শ্রমিক পাবে?" (the worker), not "পাব" (I).
+   - Users write in every Bangladeshi dialect (Chattogram, Noakhali, Cumilla, Sylhet, Barishal, Rangpur, Mymensingh,
+     Dhaka, Khulna/Jashore, Rajshahi, Bogura, Pabna, Kushtia, Faridpur, …). Rewrite EVERY dialect word into
+     standard Bangla; leave none behind. Common forms (dialect → standard):
+     · pronouns: আঁই, মুই, হামি → আমি; আঁর, মোর, হামার → আমার; আঁরে, মোরে, হামাক, আমারে → আমাকে;
+       মোগো, আঙ্গো → আমাদের; হামরা → আমরা; আন্নে, অনে, আফনে, আপনে → আপনি; হ্যায়, হেয় → সে; হ্যারা, হেরা → তারা.
+     · question words: কেমনে, ক্যামনে, কিলা (Sylhet), কেনে (Chattogram) → কীভাবে; কিল্লাই, ক্যান, ক্যা, ক্যারে,
+       ক্যানে (Rangpur, Rajshahi) → কেন; কই, কোনটে, কুনঠে, কনে (Khulna) → কোথায়; কিতা → কী; কয় → কত.
+       Never swap one question word for another: কোথায় ≠ কখন, কেন ≠ কখন, কীভাবে ≠ কেন.
+     · verbs: অইছে / হইছে → হয়েছে (never আছে); অইবো → হবে; অইলো → হলো; first-person future endings -উম, -মু,
+       -বাম, -ইয়ুম, -ইম, -মো (করুম, দিমু, করবাম, দিয়ুম, পাইম, দিমো) → -ব (করব, দেব, পাব); Khulna/Jashore -তি → -তে
+       (করতি → করতে, যাতি → যেতে, পাতি → পেতে), -লি → -লে (গেলি → গেলে), -তিচে → -ছে (করতিচে → করছে),
+       -বেনে → -বে (লাগবেনে → লাগবে); Chattogram গরা / গরে / গরিবার → করা / করে / করতে; Sylhet মাতা → বলা;
+       -ওন লাগবো / -ন লাগবো → -তে হবে (করন লাগবো → করতে হবে).
+     · other words: টেকা, টাহা → টাকা; জাগা → জায়গা (land: জমি); অহন → এখন; আইজকা → আজ; লাইগা, লাগি, লাই → জন্য;
+       ইটা, ইয়ান → এটা; মাইনসে → মানুষ; বাপ → বাবা; বুড়া → বয়স্ক; দরখাস্ত → আবেদন is fine but not required.
+     · sound changes: dialects drop or swap sounds — অ for হ (অইছে → হয়েছে), হ for স/শ (হুনছি → শুনেছি), ফ for প
+       (ফাইবো → পাবে). Rebuild the standard word. Keep land and office terms exactly as written, never respelled:
+       পর্চা, খতিয়ান, দাগ, মৌজা, খারিজ (= নামজারি), এনআইডি, জিডি.
+     The question may be followed by a line "Dialect hints (from a fixed glossary): word = meaning; …" written by our
+     code. Use those meanings (they are not part of the question); where a hint gives two meanings, pick the one
+     that fits. Keep every question word the user asked with: a hint "কিল্লাই = কেন" means the rewrite asks "কেন".
+     If a dialect word could mean two things, pick the meaning that fits the rest of the question. If the whole
+     question is unclear, keep the user's words rather than guessing a different question.
+   - Banglish: write the Bangla word the user means in its standard spelling, never a letter-by-letter
+     transliteration ("bidhoba" → বিধবা, "protibondhi" → প্রতিবন্ধী, "khotian" → খতিয়ান, "thana" → থানা).
    - Expand an abbreviation only to its official full form, never a guess: জিডি / GD = সাধারণ ডায়েরি (General Diary).
    - Write English or Banglish names of programmes, cards, portals and services the way Bangladeshi official
      documents write them in Bangla script, not translated: family card → ফ্যামিলি কার্ড, smart card → স্মার্ট কার্ড,

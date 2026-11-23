@@ -341,6 +341,20 @@ Last, in this order:
 
 **Done when:** 🔊 plays every demo answer instantly from the cache, and a new answer starts within a few seconds.
 
+## Phase 14 — All regional dialects (added 23 Nov, team request)
+
+**Goal:** Call 1 rewrites any Bangladeshi dialect into standard Bangla without reversing or changing the question.
+
+- [x] 14.1 Test set `data/evaluation/dialect_normalization.jsonl`: 38 questions, 10 dialects (Chattogram, Noakhali, Cumilla, Sylhet, Barishal, Rangpur, Mymensingh, Dhaka, Khulna, Rajshahi) + Banglish, English, off-topic. Labels are properties of the question (area, in scope, negated, person, key terms, the standard words the meaning needs); `expected_standard` is left empty for a human. **The dialect sentences were written by Claude and need a native speaker's review** (`reviewed: false`).
+- [x] 14.2 `app/evaluation/normalization_metrics.py` + `scripts/eval_normalization.py`: one Groq call per case, resumable, checks area, scope, polarity (meaning reversed), person (I↔you swapped), dialect leftovers, key terms, meaning words
+- [x] 14.3 `prompts/normalize.md`: dialect guide (pronouns, question words, verb endings, sound changes, dialect negatives: Chattogram ন before the verb, Sylhet নায়, verb + নাই), keep negatives inside questions, keep the verb's person, Banglish spelling rule
+- [x] 14.4 `services/dialect_hints.py`: a fixed glossary that code matches in the question and appends to the Call 1 input ("কিল্লাই = কেন"), because both models kept dropping or swapping dialect question words even with the guide. The user's text, cache key and logs are unchanged; still one LLM call
+- [x] 14.5 Results on `openai/gpt-oss-120b` (fully correct cases): old prompt **21/38** (3 reversed meanings, 7 with dialect words left, e.g. "পায় না ক্যা?" → "পায় কি?", "ক্যানে আইসে নাই" → "কখন এসেছে", "অইছে" → "আছে") → prompt guide 31/38 → + glossary **34/38** (0 reversed, 0 leftovers). `gpt-oss-20b` with the guide: 29/38. Remaining: past negative read as present/future (sylhet-3, rangpur-3), "ন দিয়ে" kept as "না দিয়ে", one Banglish misspelling
+- [ ] 14.6 Re-run after the Groq daily limit resets: `python scripts/eval_normalization.py --tag v4 --sleep 25` (12/38 done; the last fixes — verb + নাই/নায় hints, Banglish rule — are unit-tested, not yet measured live)
+- [ ] 14.7 A native speaker of each dialect reviews the test questions and fills `expected_standard` (human task)
+
+**Cost:** the Call 1 prompt grew by 56% (≈1.6k → ≈2.5k input tokens), so an answer now uses ≈3.5k tokens of the 8k-per-minute and 200k-per-day free limits. All cached answers are invalidated (the cache key includes the prompt hash): run `warmup.py` again before the demo.
+
 ---
 
 ## Risks and mitigations
@@ -375,6 +389,7 @@ Last, in this order:
 - The Groq free tier throttles at a few answers per minute (≈2.5k tokens each). Uncached answers took 3–29 s on 22 Nov even when spaced 15 s apart; rely on the cache and warm-up.
 - The Bijoy converter table is core-only and not spot-checked on real legacy-font pages. The Surya and PaddleOCR adapters aren't wired.
 - A few glyphs are missing from the bdlaws PDF text layer (e.g. `ং` after some conjuncts: `প্রিন্টি প্রেস`), and some source pages carry their own legacy typos (`পরবতী`). These are kept as in the source.
+- Dialect normalization is 34/38 on a 38-question set written by Claude, not yet reviewed by native speakers; past negatives ("দেয় নায়", "আইসে নাই") are still sometimes read as present or future.
 - Voice input was checked with a scripted recognizer and Chromium's fake microphone, not yet with a real microphone.
 - Read-aloud: the ElevenLabs free tier is about 10k characters a month and this key can't read its balance. Answers over `TTS_MAX_CHARS` (1,500) are spoken only up to a sentence end. The browser fallback needs a Bangla system voice, which desktop Chrome on Linux lacks. `data/tts_cache/` has no size limit, and audio of answers that later change stays until the folder is deleted.
 - Admin jobs and personal documents live in the API process's memory: a restart loses running job status and attached personal documents (by design for personal documents). Run a single API worker.

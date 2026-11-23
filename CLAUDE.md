@@ -76,6 +76,7 @@ python scripts/try_retrieval.py "প্রশ্ন" --area labour       # inspe
 python scripts/eval_retrieval.py            # dense vs BM25 vs hybrid on retrieval_seed.jsonl
 python scripts/test_llm_models.py openai/gpt-oss-20b --with-answer   # compare Groq models
 python scripts/run_eval.py --fresh          # full pipeline (no web fallback) on gold.jsonl -> data/evaluation/results.json
+python scripts/eval_normalization.py --sleep 25   # Call 1 on 38 dialect questions: meaning reversed? dialect left? (≈38 Groq calls)
 python scripts/warmup.py                    # wake DBs, load e5, pre-cache docs/demo_script.md questions
 python scripts/warmup.py --tts              # also pre-generate their 🔊 audio (spends ElevenLabs credits once)
 python scripts/create_admin.py you@example.com   # create admin / reset password (asks for it)
@@ -92,7 +93,7 @@ npm run build && npm run lint
 ## Architecture
 
 ```
-question ─► cache(raw) ─► Call 1 normalize/classify (query_normalizer) ─► pre gate (off-topic & area unknown → refuse; clarify)
+question ─► cache(raw) ─► Call 1 normalize/classify (query_normalizer; dialect_hints appends a fixed glossary of dialect words it finds) ─► pre gate (off-topic & area unknown → refuse; clarify)
         ─► cache(normalized) ─► retrieve twice (classified area + all areas; once if the caller fixed the area):
            dense (Qdrant, e5 "query:") + BM25 + exact "ধারা/অনুচ্ছেদ N" list ─► RRF, diversify, repealed last ─► top 5
         ─► score gate (RETRIEVAL_MIN_SCORE) + web fallback when evidence is weak
@@ -107,7 +108,7 @@ question ─► cache(raw) ─► Call 1 normalize/classify (query_normalizer) �
 - **bdlaws PDFs:** PyMuPDF splits Bangla words at conjunct glyphs into separate "lines" on one visual row. `pdf_parser.extract_rows` rebuilds rows (glyphs from `words`, spaces from `rawdict`). `bdlaws_parser` separates margin titles (x0<120, narrow), footnotes (ASCII-numbered → `notes`) and body. `text_repair` fixes doubled vowel signs and Bijoy leftovers. Never use `\d` for these patterns, because it matches Bangla digits.
 - **Sources:** built-in sources are steps in `ingestion/dataset_sources.py` (`data/dataset_registry.json`; `area_map.PDF_FOLDERS` is empty, so `convert_pdfs.py` is legacy). Admin uploads are recorded in `data/sources_registry.json` and `data/sources_log.csv`, with originals in `data/originals/<area>/`.
 - **Citations:** built from stored chunk metadata, never from LLM text.
-- **LLM:** on 22 Nov `.env` runs `openai/gpt-oss-120b`, pending a team decision. `openai/gpt-oss-20b` won the 21 Nov comparison (correct dialect and Banglish normalization, faithful numbers). The free tier throttles at a few answers per minute (≈2.5k tokens per answer), so space out evaluation runs (`--sleep 15`) and rely on the cache and `warmup.py` for demos.
+- **LLM:** on 22 Nov `.env` runs `openai/gpt-oss-120b`, pending a team decision. `openai/gpt-oss-20b` won the 21 Nov comparison (correct dialect and Banglish normalization, faithful numbers). The free tier throttles at a few answers per minute (≈3.5k tokens per answer since the 23 Nov dialect guide; 200k tokens per day per model), so space out evaluation runs (`--sleep 15`) and rely on the cache and `warmup.py` for demos.
 - **Admin panel:** `/admin` (frontend) with `api/routes/admin.py`. Admins log in with email and password (`admin_users` table, scrypt hashes; `api/routes/admin_auth.py`) and get an HMAC session token signed with `APP_SECRET_KEY` (`core/security.py`). `ADMIN_TOKEN` is an optional static key. Create admins with `scripts/create_admin.py`; never put credentials in code or docs. `services/knowledge_admin.py` ingests uploads as background jobs, one at a time. Only the new document is embedded; BM25 is rebuilt and swapped in place via `Retriever.replace_index`; every change clears the answer cache. Built-in documents (`data/dataset_registry.json`) can't be deleted from the panel. Uploads are not in the dataset chunk cache, so a later dataset step drops them from BM25.
 - **Personal documents:** `/user-docs` plus `services/user_docs.py`. Kept in process memory only (TTL `USER_DOC_TTL_MINUTES`) and **never** embedded, indexed, cached, logged or written to disk. With `user_doc_id`, the orchestrator labels user passages `[U…]` next to official `[C…]`, skips the cache and the pre-answer refusals, and citations get `kind: "user"`. **Known violation of "never written to disk":** Starlette spools uploads over 1 MB, and PDF extraction and Tesseract use temp files.
 - **Data status (22 Nov):** all 26 DataSet steps are ingested: 1,927 documents, 73,805 chunks in each store (land 4,048; gd 1,376; allowance 1,426; labour 1,369; general 65,586). 400 chunks are compiled guides, not official text, but are cited as `kind: "official"`.

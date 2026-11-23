@@ -7,6 +7,7 @@ from app.ingestion.text_normalizer import normalize_text
 from app.models.llm_client import LLMBadOutput, LLMClient
 from app.prompts import load_prompt
 from app.schemas.llm import NormalizeOutput
+from app.services.dialect_hints import with_hints
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,12 @@ async def normalize_query(llm: LLMClient, message: str) -> NormalizedQuery:
     message = normalize_text(message)
     try:
         result = await llm.complete_json(
-            load_prompt("normalize"), message, NormalizeOutput, temperature=0.0, max_tokens=500, purpose="normalize"
+            load_prompt("normalize"),
+            with_hints(message),
+            NormalizeOutput,
+            temperature=0.0,
+            max_tokens=500,
+            purpose="normalize",
         )
     except LLMBadOutput as exc:
         # Fallback (never block on Call 1): search all areas with the raw question; Call 2 + validation still guard.
