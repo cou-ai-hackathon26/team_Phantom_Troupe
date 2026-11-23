@@ -2,22 +2,140 @@
 
 **সরকারি নথি থেকে আপনার অধিকারের উত্তর** — a voice-first Bangla assistant for land services, police GD, social allowances, workers' rights and other Bangladesh laws. Users speak or type in standard Bangla, a regional dialect, Banglish or English. Answers are generated only from retrieved government text (plus the user's own document, if attached), are shown with citations, and can be read aloud with 🔊. When no source supports an answer, the assistant says so and points to the national helpline 333.
 
-Team **Phantom Troupe** · CoU AI Hackathon 2026. Build plan and progress are in [`plan.md`](plan.md); the architecture spec is [`docs/pipeline.md`](docs/pipeline.md); the demo is in [`docs/demo_script.md`](docs/demo_script.md).
+## Project and team
 
-## Corpus
+| | |
+|---|---|
+| **Project** | AdhikarAI (অধিকারAI) — evidence-grounded legal and public-service information in Bangla |
+| **Team** | **Phantom Troupe** |
+| **Event** | CoU AI Hackathon 2026 · final demo 24 Nov 2026 |
+| **Repository** | <https://github.com/jihadmia35/Adhikar-AI> |
 
-As of 22 Nov 2026, with the same count in Postgres, Qdrant and BM25:
+**Members**
 
-| Area | Chunks | Main sources |
-|---|---:|---|
-| `land` | 4,048 | Ministry of Land acts, rules, policies and portal pages; land acts from the bdlaws index |
-| `gd` | 1,376 | Online GD manual, Bangladesh Police documents; police acts from the bdlaws index |
-| `allowance` | 1,426 | Department of Social Services allowance documents and pages |
-| `labour` | 1,369 | Labour Act 2006, Amendment Act 2026, other labour acts from the bdlaws index |
-| `general` | 65,586 | Constitution, bdlaws Chronological Index (1799–2026), NHRC, other DSS documents |
-| **Total** | **73,805** | **1,927 documents** |
+| Name | Role |
+|---|---|
+| _TODO: member name_ | _TODO: role_ |
+| _TODO: member name_ | _TODO: role_ |
+| _TODO: member name_ | _TODO: role_ |
 
-400 of these chunks come from guides the team compiled from scraped government web pages. They are titled "(সংকলিত নির্দেশিকা)" and are not official publications. Sources have not been legally reviewed: the extraction log marks every file either `unverified` or `needs_review`.
+More detail: build plan and progress in [`plan.md`](plan.md), the architecture spec in [`docs/pipeline.md`](docs/pipeline.md), the demo in [`docs/demo_script.md`](docs/demo_script.md).
+
+## Problem
+
+People in Bangladesh regularly need to know their rights and the official procedure in everyday situations: must an employer give an appointment letter, how do I check whether my land mutation (নামজারি) is done, how do I file a police General Diary for a lost NID, who can get the old-age allowance? The answers exist, but:
+
+- they are spread across many government websites and long PDFs, some typed in old Bijoy/SutonnyMJ fonts that copy out as garbled text;
+- they are written in formal legal Bangla (often the older সাধু ভাষা) or in English;
+- many people ask by voice, in a regional dialect or in Banglish, and some find long text hard to read;
+- general-purpose chatbots answer confidently without sources and can invent laws, fees or deadlines — dangerous for legal questions.
+
+## Solution
+
+AdhikarAI answers **only from official text it has retrieved, and shows the source of every claim**:
+
+1. Ask by voice or text, in standard Bangla, a regional dialect, Banglish or English.
+2. The question is rewritten into standard Bangla and classified into one of five areas.
+3. It is searched in **73,805 passages from 1,927 official documents** with hybrid (meaning + keyword) search.
+4. An LLM writes a short answer in simple Bangla using only those passages, with numbered citations to the act and section.
+5. Code checks the answer: every citation must point to a retrieved passage and every number must appear in the cited source. If nothing supports an answer, it refuses with a fixed message and the helpline 333 instead of guessing.
+6. The answer can be read aloud (🔊), and a personal document (deed, letter, notice) can be attached for one session — it is never stored or indexed.
+
+AdhikarAI gives general information, not legal advice.
+
+## Features
+
+- **Voice input** — Chrome speech recognition (`bn-BD` / `en`), with Groq Whisper as the fallback for other browsers; the recognized text is shown for correction before sending.
+- **Dialects, Banglish and English** — 10 regional dialects tested (Chattogram, Noakhali, Cumilla, Sylhet, Barishal, Rangpur, Mymensingh, Dhaka, Khulna, Rajshahi).
+- **Grounded answers with citations** — tap a citation to read the exact section text and open the official source.
+- **Safe refusal and clarification** — off-topic or unsupported questions are refused with the helpline 333; questions too vague to search get one clarifying question.
+- **Five areas** — land (`land`), police GD (`gd`), social allowances (`allowance`), workers' rights (`labour`) and every other Bangladesh law (`general`).
+- **Web fallback** — when local evidence is weak, search limited to an allow-list of official government websites; web citations are marked "verify on the linked page".
+- **🔊 Read aloud** — ElevenLabs Bangla voice, streamed and cached; the browser's voice as fallback.
+- **📎 Personal documents** — PDF or photo, local OCR, kept in memory for one hour, cited separately as "আপনার নথি", never as law.
+- **Source browser** (`/sources`), **admin panel** (`/admin`: upload, OCR, index, delete documents), **retrieval trace** (`/?debug`) and **👍/👎 feedback**.
+
+## How the AI works (AI engineering pipeline)
+
+### System architecture
+
+```mermaid
+flowchart LR
+    U[User: Chrome / Android] -->|voice → text, Web Speech API| FE[Next.js frontend]
+    FE -->|REST /api/v1| API[FastAPI backend]
+    API --> ORCH[Orchestrator]
+    ORCH -->|Call 1 + Call 2| GROQ[Groq LLM<br/>gpt-oss]
+    ORCH --> E5[multilingual-e5-base<br/>local embeddings]
+    ORCH --> QD[(Qdrant Cloud<br/>dense vectors)]
+    ORCH --> BM[BM25 index<br/>in memory]
+    ORCH --> PG[(Supabase Postgres<br/>chunks, cache, logs)]
+    ORCH -.->|weak evidence only| TAV[Tavily search<br/>official sites only]
+    API -.->|🔊 on tap| EL[ElevenLabs TTS]
+    API -.->|non-Chrome voice| WH[Groq Whisper STT]
+```
+
+### Query-time pipeline (one question)
+
+```mermaid
+flowchart TD
+    Q[Question: voice or text] --> C1{Answer cache<br/>raw question}
+    C1 -->|hit| OUT
+    C1 -->|miss| H[Dialect glossary hints<br/>code]
+    H --> N[Call 1 · LLM<br/>standard Bangla, area, in scope?, search query]
+    N --> G1{Pre-gate · code}
+    G1 -->|off-topic| REF[Refuse: fixed text + 333]
+    G1 -->|too vague| CLR[Ask one clarifying question]
+    G1 -->|ok| C2{Answer cache<br/>normalized question}
+    C2 -->|hit| OUT
+    C2 -->|miss| R[Hybrid retrieval · code<br/>e5 dense + BM25 + exact ধারা/অনুচ্ছেদ N<br/>in the area and in all areas]
+    R --> F[RRF fusion k=60, diversify,<br/>repealed acts last → top 5]
+    F --> G2{Score gate · code}
+    G2 -->|weak| W[Web fallback<br/>official domains only]
+    W --> A
+    G2 -->|strong| A[Call 2 · LLM<br/>answer only from passages, cite C/W/U labels]
+    A --> V[Citation validator · code<br/>labels ∈ retrieved, numbers ∈ cited text]
+    V --> S{Status}
+    S --> OUT[answered / partial with warning]
+    S --> REF
+    OUT --> TTS[🔊 optional: same text read aloud]
+```
+
+| Step | Runs as | What it does |
+|---|---|---|
+| Dialect hints | code (`services/dialect_hints.py`) | finds known dialect words (কিল্লাই, ক্যামনে, মুই…) and adds their standard meaning to the Call 1 input |
+| Call 1 | LLM (`prompts/normalize.md`) | rewrites into standard Bangla without changing meaning, negation or person; picks the area; writes a search query in official terms |
+| Pre-gate | code | refuses off-topic questions, asks for clarification, never answers here |
+| Retrieval | code (`services/retrieval_service.py`) | dense search (Qdrant, e5 `query:`/`passage:`), BM25 with a Bangla tokenizer, and an exact section-number list, run in the classified area and across all areas |
+| Fusion | code | Reciprocal Rank Fusion (k = 60), one passage per section, repealed acts and special-scope acts (e.g. EPZ) ranked last |
+| Score gate + web | code + Tavily | too little evidence → official-site web search; still nothing → refusal |
+| Call 2 | LLM (`prompts/answer_bn.md`) | writes the answer from labelled passages only; retrieved text is treated as evidence, never as instructions |
+| Validation | code (`services/citation_validator.py`) | drops citations to anything not retrieved; flags any number not found in its cited passage (`partial` + warning); no valid citation → refusal |
+| Cache, log | Postgres | answers cached by question hash (refusals never); query log (see *What is stored about questions*) |
+
+**Design rules:** at most **2 LLM calls** per question (Groq free tier); citations are built from stored metadata, never from model text; the refusal text is defined once in code; personal documents are never embedded, cached or logged; Groq, Tavily and ElevenLabs calls have timeouts and bounded retries.
+
+### Offline ingestion pipeline
+
+```mermaid
+flowchart LR
+    SRC[Official PDFs, web pages,<br/>bdlaws SQLite index] --> REG[Source registry<br/>sha256, issuer, URL]
+    REG --> P[PyMuPDF text<br/>row rebuild for Bangla conjuncts]
+    P --> FIX[Bijoy → Unicode<br/>text repair]
+    P -->|scanned page| OCR[Local OCR<br/>Tesseract ben+eng → EasyOCR]
+    OCR --> STR
+    FIX --> STR[Structure: act, chapter,<br/>section, margin titles, footnotes]
+    STR --> CH[Section-aware chunking]
+    CH --> EMB[e5 embeddings<br/>local GPU/CPU]
+    EMB --> QD[(Qdrant)]
+    CH --> BM[BM25 pickle]
+    CH --> PG[(Postgres chunks)]
+```
+
+### Evaluation so far
+
+- **212 automated tests** (LLM, network and database mocked) for parsing, chunking, retrieval, fusion, the orchestrator, citation validation, web fallback, TTS and dialect checks.
+- **Dialect normalization** (`scripts/eval_normalization.py`, 38 questions, 10 dialects): fully correct rewrites went from **21/38 to 34/38** after the dialect guide and code glossary, with **no reversed meanings** left (`plan.md` Phase 14). The test questions still need review by native speakers.
+- **Retrieval and answer accuracy are not measured yet**: the 24-question gold set (`data/evaluation/gold.jsonl`) waits for human labels.
 
 ## Current limitations
 
@@ -29,26 +147,6 @@ AdhikarAI is a prototype and is not legal advice. In manual checks on 22 Nov 202
 - Retrieval and answer accuracy are unmeasured, because the gold set is not labelled yet.
 
 The full list is in [`plan.md`](plan.md#known-limitations).
-
-## How it works
-
-```
-question (voice/text) ─► answer cache ─► Call 1: normalize, classify area, write search query   [Groq LLM]
-   ─► gate: off-topic? too vague? ─► answer cache (normalized question)
-   ─► hybrid retrieval in the classified area AND in all areas: e5 dense (Qdrant) + BM25 + exact "ধারা/অনুচ্ছেদ N"
-      fused with RRF k=60, de-duplicated, repealed acts ranked last ─► top 5
-   ─► evidence weak? ─► web fallback: Tavily, official domains only
-   ─► still no evidence? refuse ─► Call 2: answer citing [C…] local / [W…] web passages          [Groq LLM]
-   ─► validation in code: cited ids ∈ retrieved, numbers appear in the cited source
-   ─► answered | partial (warning) | refused (fixed text + ৩৩৩) | clarify
-   ─► 🔊 on tap: the same answer read aloud (ElevenLabs, cached; browser voice fallback)
-```
-
-- At most **2 LLM calls** per question (HTTP retries aside). Answers are cached by question hash; refusals never are.
-- Citations are built from stored metadata, never from model text. Labour Act 2006 citations link to the section page. Many other documents link only to the issuing site, and some have no link.
-- **Web fallback** (`WEB_FALLBACK=true` and `TAVILY_API_KEY`): runs when the score gate refuses or the best dense score is below `WEB_TRIGGER_SCORE`, unless a named section matched exactly. Only the rewritten search query is sent, never for personal-document questions. Web citations are marked and carry a link and a warning.
-- **Read aloud** (`ELEVENLABS_API_KEY`): 🔊 শুনুন under each answer speaks the validated answer itself (no extra LLM call) with ElevenLabs `eleven_v3` in Bangla. Audio streams (first sound in about 1 s) and is cached in `data/tts_cache/`, so each answer spends free-tier characters once. Only answers the API signed can be spoken. If ElevenLabs fails, the browser's own Bangla voice is used where one exists (Android Chrome has one; desktop Chrome on Linux does not).
-- Offline ingestion: bdlaws PDF parsing, text repair, Bijoy → Unicode, local OCR, scraped Markdown and the bdlaws SQLite index, then section-aware chunking into Postgres + Qdrant + BM25.
 
 ## Run it
 
@@ -220,11 +318,32 @@ cd backend && .venv/bin/python scripts/ingest_jsonl.py --skip-postgres
 
 Without Postgres the answer cache is in-memory, questions aren't logged and email admin login is unavailable.
 
-## Credits
+## Tech stack, models, APIs and datasets
 
-The hackathon rules require crediting every tool, library, model and data source.
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.12, FastAPI, Pydantic v2, pydantic-settings, Uvicorn, SQLAlchemy 2 (async) + asyncpg, httpx |
+| Frontend | Next.js 15 (App Router), React 19, TypeScript (strict), Tailwind CSS, shadcn/ui (Radix UI), lucide-react |
+| Databases | Supabase PostgreSQL (documents, chunks, answer cache, logs, admin users), Qdrant Cloud (vectors), BM25 index file |
+| Retrieval | `rank_bm25` with a Bangla-aware tokenizer, Reciprocal Rank Fusion |
+| Documents | PyMuPDF, own Bijoy/SutonnyMJ → Unicode converter, Tesseract OCR (`ben+eng`), EasyOCR, Pillow, ffmpeg |
+| Testing and quality | pytest, pytest-asyncio, ruff, ESLint, uv |
 
-**Data sources:**
+**Models**
+
+| Model | Provider | Used for |
+|---|---|---|
+| `openai/gpt-oss-120b`, `openai/gpt-oss-20b` | Groq (free tier) | Call 1 (normalize, classify) and Call 2 (grounded answer); chosen by `LLM_MODEL` |
+| `qwen/qwen3.8-27b` | Groq | model comparison only (`scripts/test_llm_models.py`) |
+| `whisper-large-v3` | Groq | speech-to-text fallback for browsers without Bangla speech recognition |
+| `intfloat/multilingual-e5-base` | Hugging Face, run locally | 768-dim embeddings for questions and passages |
+| `eleven_v3` | ElevenLabs (free tier) | 🔊 Bangla read-aloud |
+| Chrome speech recognition and browser voices | Web Speech API | voice input; read-aloud fallback |
+
+**APIs:** Groq API · Qdrant Cloud API · Supabase (PostgreSQL) · Tavily Search API (web fallback, official domains only) · ElevenLabs Text-to-Speech API · browser Web Speech API.
+
+**Datasets (official sources)**
+
 - [Laws of Bangladesh](http://bdlaws.minlaw.gov.bd/), Legislative and Parliamentary Affairs Division, Ministry of Law, Justice and Parliamentary Affairs: [Labour Act 2006](http://bdlaws.minlaw.gov.bd/act-952.html), [Labour (Amendment) Act 2026](http://bdlaws.minlaw.gov.bd/act-1672.html), [Constitution](http://bdlaws.minlaw.gov.bd/act-957.html) and the Chronological Index
 - Ministry of Land: [minland.gov.bd](https://minland.gov.bd/), [land.gov.bd](https://land.gov.bd/), [mutation.land.gov.bd](https://mutation.land.gov.bd/), [case.gov.bd](https://case.gov.bd/)
 - Bangladesh Police: [police.gov.bd](https://www.police.gov.bd/), [Online GD](https://gd.police.gov.bd/)
@@ -233,12 +352,43 @@ The hackathon rules require crediting every tool, library, model and data source
 - Guides compiled by the team from scraped pages of government sites (not official publications)
 - Per-file provenance and sha256: `data/sources_log.csv`; document registry: `data/dataset_registry.json`
 
-**Models and services:** [intfloat/multilingual-e5-base](https://huggingface.co/intfloat/multilingual-e5-base) (embeddings, run locally) · [Tavily](https://tavily.com) search API, free tier (web fallback limited to official government sites) · [Groq](https://groq.com) free tier: `openai/gpt-oss-20b` and `openai/gpt-oss-120b` (OpenAI open-weight models) for answers, `qwen/qwen3.8-27b` (model comparison only), `whisper-large-v3` (OpenAI Whisper) for speech-to-text fallback · [Supabase](https://supabase.com) (PostgreSQL) · [Qdrant Cloud](https://qdrant.tech) (vector database) · browser Web Speech API (Chrome speech recognition, and the browser's own voice as the read-aloud fallback) · [ElevenLabs](https://elevenlabs.io) text-to-speech, free tier: `eleven_v3` (🔊 read-aloud of answers)
+Corpus as of 22 Nov 2026, with the same count in Postgres, Qdrant and BM25:
 
-**Backend libraries:** FastAPI · Pydantic / pydantic-settings · Uvicorn · SQLAlchemy · asyncpg · qdrant-client · groq SDK · httpx · sentence-transformers · Hugging Face Transformers · PyTorch · rank-bm25 · tqdm · python-multipart · PyMuPDF · pytesseract / Tesseract OCR · EasyOCR · Pillow · NumPy · ffmpeg · SQLite · pytest · pytest-asyncio · ruff · uv
+| Area | Chunks | Main sources |
+|---|---:|---|
+| `land` | 4,048 | Ministry of Land acts, rules, policies and portal pages; land acts from the bdlaws index |
+| `gd` | 1,376 | Online GD manual, Bangladesh Police documents; police acts from the bdlaws index |
+| `allowance` | 1,426 | Department of Social Services allowance documents and pages |
+| `labour` | 1,369 | Labour Act 2006, Amendment Act 2026, other labour acts from the bdlaws index |
+| `general` | 65,586 | Constitution, bdlaws Chronological Index (1799–2026), NHRC, other DSS documents |
+| **Total** | **73,805** | **1,927 documents** |
 
-**Frontend libraries:** Next.js · React · TypeScript · Tailwind CSS · shadcn/ui · Radix UI · lucide-react · tw-animate-css · class-variance-authority · clsx · tailwind-merge · ESLint · Hind Siliguri font (Google Fonts)
+400 of these chunks come from guides the team compiled from scraped government web pages. They are titled "(সংকলিত নির্দেশিকা)" and are not official publications. Sources have not been legally reviewed: the extraction log marks every file either `unverified` or `needs_review`.
 
-**Development tools:** Playwright with headless Chromium (UI screenshots and voice-flow checks during development) · Docker Compose (offline profile)
+**Evaluation data (made by the team):** `data/evaluation/gold.jsonl` (24 questions), `retrieval_seed.jsonl`, and `dialect_normalization.jsonl` (38 dialect questions written with Claude's help; awaiting native-speaker review).
 
-**AI coding assistant:** [Claude Code](https://claude.com/claude-code) (Anthropic) helped write code and documentation.
+## AI tools used
+
+| Tool | Used for |
+|---|---|
+| [Claude Code](https://claude.com/claude-code) (Anthropic) | writing and refactoring backend and frontend code, tests, prompts and documentation; debugging; drafting the dialect test questions |
+| Claude (Anthropic) | research |
+| ChatGPT (OpenAI) | research |
+| Gemini (Google) | research |
+| Perplexity | research |
+
+All AI-assisted output was reviewed by the team. The AI models inside the product itself are listed under *Models* above.
+
+## Third-party code and assets
+
+| What | Where in this repo | Source and licence |
+|---|---|---|
+| shadcn/ui components (badge, button, card, collapsible, input, pagination, separator, sheet, skeleton, table, textarea, tooltip) | `frontend/components/ui/` | generated with the shadcn/ui CLI ([ui.shadcn.com](https://ui.shadcn.com)), MIT; built on Radix UI (MIT) |
+| Hind Siliguri font | loaded with `next/font/google` | Indian Type Foundry via Google Fonts, SIL Open Font License 1.1 |
+| lucide icons | `lucide-react` package | [lucide.dev](https://lucide.dev), ISC |
+| Government documents and web pages | `data/` (not in git; see *Datasets*) | public government sources credited above; copyright stays with the issuing offices |
+| Open-source libraries | `backend/requirements.txt`, `frontend/package.json` | their own licences (FastAPI, Pydantic, SQLAlchemy, qdrant-client, groq SDK, sentence-transformers, Transformers, PyTorch, rank-bm25, PyMuPDF, pytesseract, EasyOCR, Next.js, React, Tailwind CSS, Radix UI, …) |
+
+No other code was copied into the repository. The Bijoy/SutonnyMJ converter table, parsers, retrieval, validation and prompts were written for this project.
+
+**Development tools:** Playwright with headless Chromium (UI screenshots and voice-flow checks during development) · Docker Compose (offline profile) · uv.
