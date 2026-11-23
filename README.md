@@ -129,6 +129,7 @@ With Postgres configured, `query_logs` keeps the normalized question and, when i
 | `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `EMBEDDING_DEVICE` | local `intfloat/multilingual-e5-base`, 768 dims |
 | `RETRIEVAL_MIN_SCORE` | score gate (tune with `scripts/run_eval.py`) |
 | `TAVILY_API_KEY`, `WEB_FALLBACK`, `WEB_TRIGGER_SCORE`, `WEB_MAX_RESULTS` | web fallback; off by default |
+| `ELEVENLABS_API_KEY`, `TTS_ENABLED`, `TTS_MODEL_ID`, `TTS_VOICE_ID`, `TTS_MAX_CHARS` | 🔊 read-aloud (ElevenLabs free tier, ~10k characters/month; audio cached in `data/tts_cache/`). Without a key the button uses the browser's Bangla voice |
 | `WEB_ALLOWED_DOMAINS` | optional override of the official-site list. Omit it for the default: an empty value blocks every site |
 | `OCR_PROVIDER`, `OCR_SECOND_ENGINE`, `OCR_DEVICE`, `OCR_MIN_CONFIDENCE` | local OCR only |
 | `APP_SECRET_KEY`, `ADMIN_SESSION_HOURS` | signs admin login sessions (long random string); session length |
@@ -174,6 +175,8 @@ cd ../frontend && npm run lint && npm run build
 | Method | Path | |
 |---|---|---|
 | POST | `/api/v1/chat` | `{"message", "area"?, "debug"?, "user_doc_id"?}` → `{status, answer, citations[], normalized_question, area, warnings[], trace?, latency_ms, cached, request_id}` |
+| POST | `/api/v1/tts` | `{text, token}` (the answer and its `speech_token` from `/chat`) → `{audio_url, cached, chars}`; 403 if the text was not produced by the API |
+| GET | `/api/v1/tts/{key}.mp3` | the answer's audio: streamed from ElevenLabs the first time, then served from the cache |
 | POST | `/api/v1/chat/voice/transcribe` | audio (≤10 MB, ≤30 s), `language` = bn\|en → `{transcript}` (Groq Whisper fallback; silence and prompt echoes rejected) |
 | POST | `/api/v1/chat/voice` | audio → chat response + `transcript` |
 | GET | `/api/v1/sources?area=&q=&page=&page_size=` | `{items[], total, page, page_size, pages, counts}` |
@@ -225,7 +228,7 @@ The hackathon rules require crediting every tool, library, model and data source
 - Guides compiled by the team from scraped pages of government sites (not official publications)
 - Per-file provenance and sha256: `data/sources_log.csv`; document registry: `data/dataset_registry.json`
 
-**Models and services:** [intfloat/multilingual-e5-base](https://huggingface.co/intfloat/multilingual-e5-base) (embeddings, run locally) · [Tavily](https://tavily.com) search API, free tier (web fallback limited to official government sites) · [Groq](https://groq.com) free tier: `openai/gpt-oss-20b` and `openai/gpt-oss-120b` (OpenAI open-weight models) for answers, `qwen/qwen3.8-27b` (model comparison only), `whisper-large-v3` (OpenAI Whisper) for speech-to-text fallback · [Supabase](https://supabase.com) (PostgreSQL) · [Qdrant Cloud](https://qdrant.tech) (vector database) · browser Web Speech API (Chrome speech recognition)
+**Models and services:** [intfloat/multilingual-e5-base](https://huggingface.co/intfloat/multilingual-e5-base) (embeddings, run locally) · [Tavily](https://tavily.com) search API, free tier (web fallback limited to official government sites) · [Groq](https://groq.com) free tier: `openai/gpt-oss-20b` and `openai/gpt-oss-120b` (OpenAI open-weight models) for answers, `qwen/qwen3.8-27b` (model comparison only), `whisper-large-v3` (OpenAI Whisper) for speech-to-text fallback · [Supabase](https://supabase.com) (PostgreSQL) · [Qdrant Cloud](https://qdrant.tech) (vector database) · browser Web Speech API (Chrome speech recognition, and the browser's own voice as the read-aloud fallback) · [ElevenLabs](https://elevenlabs.io) text-to-speech, free tier: `eleven_v3` (🔊 read-aloud of answers)
 
 **Backend libraries:** FastAPI · Pydantic / pydantic-settings · Uvicorn · SQLAlchemy · asyncpg · qdrant-client · groq SDK · httpx · sentence-transformers · Hugging Face Transformers · PyTorch · rank-bm25 · tqdm · python-multipart · PyMuPDF · pytesseract / Tesseract OCR · EasyOCR · Pillow · NumPy · ffmpeg · SQLite · pytest · pytest-asyncio · ruff · uv
 

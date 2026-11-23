@@ -9,6 +9,7 @@ import type { ChatResponse, Citation } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AssistantAvatar } from "./answer-states";
 import { AnswerText } from "./answer-text";
+import { ListenButton } from "./listen-button";
 import { StatusBadge } from "./status-badge";
 import { TracePanel } from "./trace-panel";
 
@@ -157,6 +158,7 @@ export function AnswerCard({ response, onCite }: AnswerCardProps) {
 
         {response.status !== "clarify" && (
           <div className="flex flex-wrap items-center gap-1 border-t pt-3 text-sm">
+            <ListenButton text={response.answer} token={response.speech_token ?? null} />
             <button
               type="button"
               onClick={() => void copy()}

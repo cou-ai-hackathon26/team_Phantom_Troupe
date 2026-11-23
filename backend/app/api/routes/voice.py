@@ -9,7 +9,7 @@ from app.api.dependencies import http_error, orchestrator_dep
 from app.api.routes.chat import LLM_DOWN_TEXT
 from app.models.llm_client import LLMError, LLMNotConfigured, LLMRateLimited
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services import stt_service
+from app.services import stt_service, tts_service
 from app.services.audio_utils import MAX_AUDIO_BYTES, AudioError
 from app.services.orchestrator import Orchestrator
 
@@ -66,4 +66,5 @@ async def chat_voice(
         raise http_error("rate_limited") from exc
     except LLMError as exc:
         raise http_error("llm_unavailable", LLM_DOWN_TEXT) from exc
+    result.speech_token = tts_service.speech_token(result.answer)
     return VoiceChatResponse(**result.model_dump(), transcript=transcript)

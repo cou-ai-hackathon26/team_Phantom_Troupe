@@ -58,6 +58,18 @@ class Settings(BaseSettings):
         "police.gov.bd,gd.police.gov.bd,nhrc.org.bd,ugc.gov.bd,mole.gov.bd,dife.gov.bd,bangladesh.gov.bd"
     )
 
+    # Text-to-speech (ElevenLabs): the 🔊 button reads an answer aloud. Bangla needs eleven_v3 (or v4);
+    # the API default model (multilingual_v2) has no Bangla. Free tier is ~10k characters/month, so audio
+    # is cached on disk by text hash and long answers are cut at a sentence end.
+    elevenlabs_api_key: SecretStr | None = None
+    tts_enabled: bool = True
+    tts_model_id: str = "eleven_v3"
+    tts_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"  # an ElevenLabs premade voice; change after listening
+    tts_output_format: str = "mp3_44100_64"
+    tts_max_chars: int = 1500
+    tts_timeout_s: float = 30.0
+    tts_cache_dir: Path = DATA_DIR / "tts_cache"
+
     # OCR (local only)
     ocr_provider: str = "tesseract"
     ocr_second_engine: str = "easyocr"
@@ -85,6 +97,7 @@ class Settings(BaseSettings):
         "llm_model",
         "admin_token",
         "app_secret_key",
+        "elevenlabs_api_key",
         mode="before",
     )
     @classmethod

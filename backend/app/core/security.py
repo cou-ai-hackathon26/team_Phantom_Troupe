@@ -61,6 +61,15 @@ def _unb64(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
 
+def sign_text(purpose: str, text: str) -> str:
+    """HMAC tag proving the API produced `text` (e.g. an answer the 🔊 button may send to TTS)."""
+    return _b64(hmac.new(_secret(), f"{purpose}\0{text}".encode(), hashlib.sha256).digest())
+
+
+def verify_text(purpose: str, text: str, tag: str) -> bool:
+    return hmac.compare_digest(sign_text(purpose, text), tag)
+
+
 def create_session_token(email: str, hours: int | None = None) -> tuple[str, int]:
     exp = int(time.time()) + 3600 * (hours or settings.admin_session_hours)
     payload = _b64(json.dumps({"sub": email, "exp": exp}, separators=(",", ":")).encode())

@@ -154,3 +154,6 @@ logs/
 
 # admin upload temp files (originals are preserved in data/originals/)
 data/uploads/
+
+# generated answer audio (ElevenLabs TTS cache, rebuilt on demand)
+data/tts_cache/

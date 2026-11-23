@@ -1,11 +1,13 @@
 """Demo warm-up: wake the free-tier databases, load the embedding model, pre-cache demo answers.
 
-Usage (from backend/):  python scripts/warmup.py [--skip-cache] [--sleep 15]
+Usage (from backend/):  python scripts/warmup.py [--skip-cache] [--sleep 15] [--tts]
 
 - Supabase and Qdrant free projects pause after inactivity; a query wakes them.
 - Pre-caching runs the REAL pipeline for every "- Q…:" line in docs/demo_script.md and stores the
   responses in the answer cache (Postgres when configured), so the running API serves them instantly.
   Only answers the system actually produced are cached — nothing is hand-written.
+- --tts also pre-generates the 🔊 audio of each demo answer into data/tts_cache/, so the button plays
+  instantly in the demo. It spends ElevenLabs characters (free tier ~10k/month), once per answer.
 """
 
 import argparse
@@ -32,6 +34,7 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-cache", action="store_true")
     ap.add_argument("--sleep", type=float, default=15.0, help="seconds between questions (Groq free-tier TPM)")
+    ap.add_argument("--tts", action="store_true", help="also pre-generate answer audio (spends ElevenLabs credits)")
     args = ap.parse_args()
 
     ok = True
@@ -60,8 +63,13 @@ async def main() -> int:
 
     from app.models.llm_client import get_llm_client
     from app.schemas.chat import ChatRequest
+    from app.services import tts_service
     from app.services.answer_cache import get_answer_cache
     from app.services.orchestrator import Orchestrator
+
+    if args.tts and not tts_service.is_enabled():
+        print("FAIL  --tts: ELEVENLABS_API_KEY is not set or TTS_ENABLED=false")
+        return 1
 
     cache = get_answer_cache()
     orchestrator = Orchestrator(retriever, get_llm_client(), cache)
@@ -71,6 +79,13 @@ async def main() -> int:
         try:
             resp = await orchestrator.run(ChatRequest(message=q))
             print(f"  {'cached ' if resp.cached else 'new    '} {resp.status:<9} {resp.latency_ms:>6} ms  {q}")
+            if args.tts:
+                spoken = tts_service.clean_for_speech(resp.answer)
+                was_cached = tts_service.cached_path(tts_service.audio_key(spoken)) is not None
+                path = await tts_service.synthesize_to_cache(resp.answer)
+                state = "FAIL   " if path is None else "cached " if was_cached else "new    "
+                ok = ok and path is not None
+                print(f"    tts {state} {len(spoken):>5} chars")
             if not resp.cached and i < len(questions):
                 await asyncio.sleep(args.sleep)
         except Exception as exc:  # noqa: BLE001

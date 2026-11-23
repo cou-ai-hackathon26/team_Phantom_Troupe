@@ -322,6 +322,21 @@ Last, in this order:
 
 **Done when:** the questions in 12.1–12.7 are answered correctly or safely refused, `results.json` comes from the current corpus and model, and the demo has been rehearsed.
 
+## Phase 13 — Read answers aloud (added 23 Nov, team request)
+
+**Goal:** a 🔊 শুনুন button that reads each answer in Bangla, for people who find listening easier than reading. ElevenLabs free tier (~10k characters a month), so every clip is generated once and cached.
+
+- [x] 13.1 Live check: the restricted key can do text-to-speech (not list voices); `eleven_v3` speaks Bangla and streams (first audio ≈1 s). `eleven_multilingual_v2`, the API default, has no Bangla.
+- [x] 13.2 `models/tts_client.py`: streaming endpoint, `language_code="bn"`, 3 retries with backoff on 429/5xx, quota errors reported separately
+- [x] 13.3 `services/tts_service.py`: speech text without citation markers, links or markdown, cut at a sentence end (`TTS_MAX_CHARS`); HMAC `speech_token` on `/chat` and voice-chat answers (none for personal documents); audio streamed while it is saved to `data/tts_cache/<hash>.mp3`; a second request for the same clip waits for the file instead of paying again
+- [x] 13.4 `api/routes/tts.py`: `POST /tts` (403 on an unsigned text) and `GET /tts/{key}.mp3`
+- [x] 13.5 Frontend: `hooks/use-speech-output.ts` + `components/chat/listen-button.tsx` in the answer card; one answer speaks at a time; falls back to the browser's Bangla voice when ElevenLabs fails or the answer has no token
+- [x] 13.6 `warmup.py --tts` pre-generates demo audio; 12 tests (network mocked); live round trip: 2.2 s first play, 0.01 s from cache
+- [ ] 13.7 Pick the voice by ear (human task): try 2–3 ElevenLabs voices on one answer, set `TTS_VOICE_ID`
+- [ ] 13.8 Before the demo: `warmup.py --tts`, then press 🔊 on each demo answer in Chrome. Watch the credit balance in the ElevenLabs dashboard (this key can't read it)
+
+**Done when:** 🔊 plays every demo answer instantly from the cache, and a new answer starts within a few seconds.
+
 ---
 
 ## Risks and mitigations

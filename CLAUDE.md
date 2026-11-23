@@ -14,7 +14,7 @@ AdhikarAI (অধিকারAI) is a hackathon project for the CoU AI Hackathon
 | `labour`    | workers' rights (Bangladesh Labour Act 2006 and amendments) |
 | `general`   | every other Bangladesh law (Chronological Index of bdlaws, NHRC, other DSS acts); added 21 Nov for the full DataSet |
 
-Users type or speak standard Bangla, one regional dialect, Banglish or English. Answers are text with citations. There is no text-to-speech.
+Users type or speak standard Bangla, one regional dialect, Banglish or English. Answers are text with citations, and a 🔊 button reads an answer aloud (ElevenLabs, added 23 Nov).
 
 **Grounding rule:** every answer comes only from retrieved official text and carries citations. If no source supports the answer, return exactly this text:
 
@@ -39,7 +39,8 @@ Spec: `docs/pipeline.md` (architecture v1.3; its "As built" table says what exis
 - **PDF:** PyMuPDF, plus a converter from Bijoy/SutonnyMJ legacy fonts to Unicode.
 - **Frontend:** Next.js (App Router), TypeScript, Tailwind, shadcn/ui, with a Bangla font via `next/font`.
 - **Web search (fallback only):** Tavily REST API (free tier, `TAVILY_API_KEY`), called with `httpx`.
-- **Not used:** no TTS, and no Redis unless needed. Docker is optional; `infra/docker-compose.yml` has an `offline` profile with local Postgres and Qdrant.
+- **Text-to-speech (added 23 Nov):** ElevenLabs free tier (`ELEVENLABS_API_KEY`, ~10k characters/month), model `eleven_v3` (`eleven_multilingual_v2`, the API default, has no Bangla). `services/tts_service.py`: `/chat` adds an HMAC `speech_token`, so only our own answers can be spoken; audio is streamed and cached in `data/tts_cache/` by text hash; personal-document answers get no token and use the browser voice only. `warmup.py --tts` pre-generates demo audio.
+- **Not used:** no Redis unless needed. Docker is optional; `infra/docker-compose.yml` has an `offline` profile with local Postgres and Qdrant.
 
 ## Hard rules
 

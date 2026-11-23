@@ -57,6 +57,7 @@ class ChatResponse(BaseModel):
     latency_ms: int
     cached: bool = False
     request_id: str | None = None
+    speech_token: str | None = None  # lets the 🔊 button send this answer to /tts; None = browser voice only
 
 
 class ErrorDetail(BaseModel):

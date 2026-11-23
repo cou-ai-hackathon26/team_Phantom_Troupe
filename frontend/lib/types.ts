@@ -66,6 +66,8 @@ export interface ChatResponse {
   latency_ms: number;
   cached: boolean;
   request_id: string | null;
+  /** Lets the 🔊 button send this answer to /tts (ElevenLabs). Null: browser voice only (e.g. personal documents). */
+  speech_token?: string | null;
 }
 
 export interface ApiErrorDetail {

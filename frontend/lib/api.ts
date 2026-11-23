@@ -107,6 +107,13 @@ export function transcribeAudio(blob: Blob, language: VoiceLang = "bn") {
   return request<{ transcript: string }>("/chat/voice/transcribe", { method: "POST", body: form });
 }
 
+// ---- read an answer aloud (ElevenLabs via the backend; audio is cached there by text)
+export const prepareSpeech = (text: string, token: string) =>
+  request<{ audio_url: string; cached: boolean; chars: number }>("/tts", {
+    method: "POST",
+    body: JSON.stringify({ text, token }),
+  });
+
 // ---- personal documents (kept in server memory for 1 hour; never added to the knowledge base)
 export function uploadUserDoc(file: File) {
   const form = new FormData();
