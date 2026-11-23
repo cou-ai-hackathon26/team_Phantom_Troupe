@@ -1,6 +1,6 @@
 # অধিকারAI (AdhikarAI)
 
-**সরকারি নথি থেকে আপনার অধিকারের উত্তর** — a voice-first Bangla assistant for land services, police GD, social allowances, workers' rights and other Bangladesh laws. Users speak or type in standard Bangla, a regional dialect, Banglish or English. Answers are generated only from retrieved government text (plus the user's own document, if attached) and are shown with citations. When no source supports an answer, the assistant says so and points to the national helpline 333.
+**সরকারি নথি থেকে আপনার অধিকারের উত্তর** — a voice-first Bangla assistant for land services, police GD, social allowances, workers' rights and other Bangladesh laws. Users speak or type in standard Bangla, a regional dialect, Banglish or English. Answers are generated only from retrieved government text (plus the user's own document, if attached), are shown with citations, and can be read aloud with 🔊. When no source supports an answer, the assistant says so and points to the national helpline 333.
 
 Team **Phantom Troupe** · CoU AI Hackathon 2026. Build plan and progress are in [`plan.md`](plan.md); the architecture spec is [`docs/pipeline.md`](docs/pipeline.md); the demo is in [`docs/demo_script.md`](docs/demo_script.md).
 
@@ -41,11 +41,13 @@ question (voice/text) ─► answer cache ─► Call 1: normalize, classify are
    ─► still no evidence? refuse ─► Call 2: answer citing [C…] local / [W…] web passages          [Groq LLM]
    ─► validation in code: cited ids ∈ retrieved, numbers appear in the cited source
    ─► answered | partial (warning) | refused (fixed text + ৩৩৩) | clarify
+   ─► 🔊 on tap: the same answer read aloud (ElevenLabs, cached; browser voice fallback)
 ```
 
 - At most **2 LLM calls** per question (HTTP retries aside). Answers are cached by question hash; refusals never are.
 - Citations are built from stored metadata, never from model text. Labour Act 2006 citations link to the section page. Many other documents link only to the issuing site, and some have no link.
 - **Web fallback** (`WEB_FALLBACK=true` and `TAVILY_API_KEY`): runs when the score gate refuses or the best dense score is below `WEB_TRIGGER_SCORE`, unless a named section matched exactly. Only the rewritten search query is sent, never for personal-document questions. Web citations are marked and carry a link and a warning.
+- **Read aloud** (`ELEVENLABS_API_KEY`): 🔊 শুনুন under each answer speaks the validated answer itself (no extra LLM call) with ElevenLabs `eleven_v3` in Bangla. Audio streams (first sound in about 1 s) and is cached in `data/tts_cache/`, so each answer spends free-tier characters once. Only answers the API signed can be spoken. If ElevenLabs fails, the browser's own Bangla voice is used where one exists (Android Chrome has one; desktop Chrome on Linux does not).
 - Offline ingestion: bdlaws PDF parsing, text repair, Bijoy → Unicode, local OCR, scraped Markdown and the bdlaws SQLite index, then section-aware chunking into Postgres + Qdrant + BM25.
 
 ## Run it
@@ -84,7 +86,7 @@ cd frontend && npm run dev               # or for the demo: npm run build && npx
 ```
 
 Then open:
-- <http://localhost:3000> to ask questions by voice or text, and attach your own document with 📎
+- <http://localhost:3000> to ask questions by voice or text, attach your own document with 📎, and hear an answer with 🔊
 - <http://localhost:3000/admin> to manage the knowledge base (log in with an admin email and password)
 - <http://localhost:3000/sources> to browse documents, and <http://localhost:3000/about> for a plain-language explanation
 - <http://localhost:3000/?debug> to show "এই উত্তর কীভাবে পাওয়া গেল" (the retrieval trace) under each answer
@@ -111,13 +113,15 @@ On the chat screen, 📎 attaches a PDF or photo (deed, appointment letter, noti
 
 - it is **never embedded or added to the knowledge base**, never saved to a database, never cached, and its text is never logged
 - processing uses short-lived temporary files: uploads over 1 MB are spooled to disk, and PDF extraction and Tesseract write temp files that are removed afterwards
-- the selected passages are sent to Groq to write the answer. They are never sent to web search
+- the selected passages are sent to Groq to write the answer. They are never sent to web search, and the answer is never sent to ElevenLabs: 🔊 uses the browser's voice on the device
 - it lives in server memory for `USER_DOC_TTL_MINUTES` (default 60), or until the user removes it
 - for each question, the most relevant passages of the document go to the answer step next to the official sources, and the answer cites them separately as **আপনার নথি**, never as law
 
 ## What is stored about questions
 
 With Postgres configured, `query_logs` keeps the normalized question and, when it is short and has no phone or NID-like number, the original. The normalized question, the answer cache and the query sent to Tavily are **not redacted**, so users are told not to type personal details. Questions about a personal document store no text.
+
+The audio of answers read aloud is kept in `data/tts_cache/` (git-ignored), named by a hash of the spoken text. Delete the folder to clear it; files are regenerated on demand.
 
 ## Environment variables (`.env`, names only — see `.env.example`)
 
@@ -199,9 +203,9 @@ Statuses: `answered`, `partial` (a number couldn't be matched to the source, so 
 
 ## Demo day
 
-Follow [`docs/demo_script.md`](docs/demo_script.md). `scripts/warmup.py` wakes Supabase and Qdrant and pre-caches its questions. It does not use the web fallback and cannot cache refusals.
+Follow [`docs/demo_script.md`](docs/demo_script.md). `scripts/warmup.py` wakes Supabase and Qdrant and pre-caches its questions. It does not use the web fallback and cannot cache refusals. `warmup.py --tts` also pre-generates their 🔊 audio, so it plays instantly and spends no credits on stage.
 
-**Weak venue internet:** use a phone hotspot and set `WEB_FALLBACK=false`. Groq and Chrome speech recognition always need internet, so there is no fully offline mode. Retrieval also needs Qdrant: BM25 alone is not a fallback.
+**Weak venue internet:** use a phone hotspot and set `WEB_FALLBACK=false`. Groq and Chrome speech recognition always need internet, so there is no fully offline mode. Cached 🔊 audio is served by the API itself; new audio needs ElevenLabs. Retrieval also needs Qdrant: BM25 alone is not a fallback.
 
 **Local Qdrant (not rehearsed, prepare days ahead):** this re-embeds all 73,805 chunks, which takes hours.
 

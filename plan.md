@@ -49,6 +49,8 @@ All routes live under `/api/v1`.
 | POST | `/chat` | `{"message":str(2..2000),"area":"land\|gd\|allowance\|labour\|general"?,"debug":bool=false,"user_doc_id":str?}` | `{"status":"answered\|partial\|refused\|clarify","answer":str,"citations":[{"chunk_id","act","section","title","citation","excerpt","source_url"}],"normalized_question":str,"area":str,"warnings":[str],"trace":{...}\|null,"latency_ms":int,"cached":bool}` |
 | POST | `/chat/voice/transcribe` | multipart `audio` (≤10 MB, ≤30 s) | `{"transcript":str}` |
 | POST | `/chat/voice` | multipart `audio` | the `/chat` response plus `"transcript":str` |
+| POST | `/tts` | `{"text":str,"token":str}` (an answer and its `speech_token`) | `{"audio_url":str,"cached":bool,"chars":int}`; 403 if not signed, 503 `tts_disabled` |
+| GET | `/tts/{key}.mp3` | — | `audio/mpeg` (streamed from ElevenLabs the first time, then from `data/tts_cache/`); 404 unknown key, 503 `tts_quota`/`tts_unavailable` |
 | GET | `/sources?area=&q=&page=&page_size=` | — | `{"items":[{"document_id","title","area","issuer","source_url","section_count","chunk_count"}],"total","page","page_size","pages","counts"}` |
 | GET | `/sources/documents/{document_id}` | — | `{"document":{...},"chunks":[{"chunk_id","section","title","citation"}]}` |
 | GET | `/sources/{chunk_id}` | — | `{"chunk_id","document_id","area","act","chapter","section","title","citation","text","source_url"}` |
@@ -57,7 +59,7 @@ All routes live under `/api/v1`.
 
 The admin and `/user-docs` routes are listed in `README.md` → API. Citations have `kind` = official, user or web.
 
-Each `/chat` response also carries `request_id` (pass it to `/feedback`). Citations also carry `marker` (the number shown as `[১]` in the answer) and `notes` (amendment footnotes). Errors: HTTP 503 `{"detail":{"code":"rate_limited|llm_not_configured|llm_unavailable|index_missing","message":"<Bangla>"}}`.
+Each `/chat` response also carries `request_id` (pass it to `/feedback`) and `speech_token` (for `/tts`; null for personal-document answers or when TTS is off). Citations also carry `marker` (the number shown as `[১]` in the answer) and `notes` (amendment footnotes). Errors: HTTP 503 `{"detail":{"code":"rate_limited|llm_not_configured|llm_unavailable|index_missing","message":"<Bangla>"}}`.
 
 `trace` (only when `debug=true`): `{"candidates":[{"chunk_id","citation","title","dense_rank","bm25_rank","dense_score","bm25_score","fused_score","exact_section"}],"best_dense_score":float,"llm_calls":int,"model":str,"gate":str}`.
 
@@ -76,7 +78,7 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 
 ## Env variables (`.env.example`)
 
-`APP_ENV, LOG_LEVEL, CORS_ORIGINS, DATABASE_URL, QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION, GROQ_API_KEY, LLM_MODEL, LLM_TIMEOUT_S, STT_MODEL, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_DEVICE, RETRIEVAL_MIN_SCORE, BM25_PATH, OCR_PROVIDER, OCR_SECOND_ENGINE, OCR_DEVICE, OCR_MIN_CONFIDENCE, APP_SECRET_KEY, ADMIN_SESSION_HOURS, ADMIN_TOKEN, MAX_UPLOAD_MB, USER_DOC_TTL_MINUTES, TAVILY_API_KEY, WEB_FALLBACK, WEB_TRIGGER_SCORE, WEB_MAX_RESULTS, WEB_ALLOWED_DOMAINS`, plus the frontend's `NEXT_PUBLIC_API_URL`.
+`APP_ENV, LOG_LEVEL, CORS_ORIGINS, DATABASE_URL, QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION, GROQ_API_KEY, LLM_MODEL, LLM_TIMEOUT_S, STT_MODEL, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_DEVICE, RETRIEVAL_MIN_SCORE, BM25_PATH, OCR_PROVIDER, OCR_SECOND_ENGINE, OCR_DEVICE, OCR_MIN_CONFIDENCE, APP_SECRET_KEY, ADMIN_SESSION_HOURS, ADMIN_TOKEN, MAX_UPLOAD_MB, USER_DOC_TTL_MINUTES, TAVILY_API_KEY, WEB_FALLBACK, WEB_TRIGGER_SCORE, WEB_MAX_RESULTS, WEB_ALLOWED_DOMAINS, ELEVENLABS_API_KEY, TTS_ENABLED, TTS_MODEL_ID, TTS_VOICE_ID, TTS_OUTPUT_FORMAT, TTS_MAX_CHARS, TTS_TIMEOUT_S`, plus the frontend's `NEXT_PUBLIC_API_URL`.
 
 ---
 
@@ -239,7 +241,7 @@ Collection `adhikarai_chunks`: vector size `EMBEDDING_DIM` (768), cosine distanc
 - [x] `docs/demo_script.md` (3 minutes). The opener is lay-off compensation in dialect, because the wage-payment chapter for the planned "unpaid wages" question isn't ingested.
 - [x] Offline fallback documented (README → Demo day). Not rehearsed with Docker yet.
 - [x] QA so far: 109 backend tests pass, ruff clean, `npm run lint` and `npm run build` pass, 360/1440 px screenshots checked in Phase 5, secret scan of tracked files and API logs clean, `.env` untracked
-- [ ] Settle the model (12.2), then run `warmup.py` the day before and the morning of the demo
+- [ ] Settle the model (12.2), then run `warmup.py --tts` the day before and the morning of the demo
 - [ ] Rehearse the demo in Chrome with a real microphone; rehearse the offline profile once
 - [ ] Final QA after the remaining documents are ingested
 
@@ -332,6 +334,8 @@ Last, in this order:
 - [x] 13.4 `api/routes/tts.py`: `POST /tts` (403 on an unsigned text) and `GET /tts/{key}.mp3`
 - [x] 13.5 Frontend: `hooks/use-speech-output.ts` + `components/chat/listen-button.tsx` in the answer card; one answer speaks at a time; falls back to the browser's Bangla voice when ElevenLabs fails or the answer has no token
 - [x] 13.6 `warmup.py --tts` pre-generates demo audio; 12 tests (network mocked); live round trip: 2.2 s first play, 0.01 s from cache
+- [x] 13.6b The button says why the online voice wasn't used (old backend without `speech_token`, no token, provider error), because desktop Chrome on Linux has no Bangla voice and the bare fallback message was misleading
+- [x] 13.6c Docs updated: README, CLAUDE.md, `docs/pipeline.md` 1.4, `docs/demo_script.md`
 - [ ] 13.7 Pick the voice by ear (human task): try 2–3 ElevenLabs voices on one answer, set `TTS_VOICE_ID`
 - [ ] 13.8 Before the demo: `warmup.py --tts`, then press 🔊 on each demo answer in Chrome. Watch the credit balance in the ElevenLabs dashboard (this key can't read it)
 
@@ -350,15 +354,17 @@ Last, in this order:
 | OCR quality on scanned Bangla | Look for a text copy first, try Tesseract then a second engine, compare with `compare_ocr.py`, and mark low-confidence pages `needs_review` |
 | Dataset arrives late or as PDFs | Resolved: full DataSet ingested in Phase 11 |
 | Hallucinated numbers | Numeric validator marks the answer `partial` with a warning, and citations come only from stored metadata |
+| ElevenLabs free quota used up on demo day | `warmup.py --tts` caches demo audio beforehand; cached audio needs no credits; `TTS_ENABLED=false` switches ElevenLabs off |
 
 ## Cut list (drop in this order if time runs short)
 
-1. `/sources` browse page (keep the citation sheet)
-2. Eval table in the UI (keep the CLI results)
-3. Second OCR engine (Tesseract only)
-4. Whisper fallback (Chrome only, demoed in Chrome)
-5. Legacy-font conversion for new PDFs (use the prepared JSONL)
-6. Answer cache in Postgres (switch to an in-memory LRU)
+1. 🔊 read-aloud (`TTS_ENABLED=false`; the button then tries only the browser voice)
+2. `/sources` browse page (keep the citation sheet)
+3. Eval table in the UI (keep the CLI results)
+4. Second OCR engine (Tesseract only)
+5. Whisper fallback (Chrome only, demoed in Chrome)
+6. Legacy-font conversion for new PDFs (use the prepared JSONL)
+7. Answer cache in Postgres (switch to an in-memory LRU)
 
 ## Known limitations
 
@@ -370,4 +376,5 @@ Last, in this order:
 - The Bijoy converter table is core-only and not spot-checked on real legacy-font pages. The Surya and PaddleOCR adapters aren't wired.
 - A few glyphs are missing from the bdlaws PDF text layer (e.g. `ং` after some conjuncts: `প্রিন্টি প্রেস`), and some source pages carry their own legacy typos (`পরবতী`). These are kept as in the source.
 - Voice input was checked with a scripted recognizer and Chromium's fake microphone, not yet with a real microphone.
+- Read-aloud: the ElevenLabs free tier is about 10k characters a month and this key can't read its balance. Answers over `TTS_MAX_CHARS` (1,500) are spoken only up to a sentence end. The browser fallback needs a Bangla system voice, which desktop Chrome on Linux lacks. `data/tts_cache/` has no size limit, and audio of answers that later change stays until the folder is deleted.
 - Admin jobs and personal documents live in the API process's memory: a restart loses running job status and attached personal documents (by design for personal documents). Run a single API worker.

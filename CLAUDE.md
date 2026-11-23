@@ -77,6 +77,7 @@ python scripts/eval_retrieval.py            # dense vs BM25 vs hybrid on retriev
 python scripts/test_llm_models.py openai/gpt-oss-20b --with-answer   # compare Groq models
 python scripts/run_eval.py --fresh          # full pipeline (no web fallback) on gold.jsonl -> data/evaluation/results.json
 python scripts/warmup.py                    # wake DBs, load e5, pre-cache docs/demo_script.md questions
+python scripts/warmup.py --tts              # also pre-generate their 🔊 audio (spends ElevenLabs credits once)
 python scripts/create_admin.py you@example.com   # create admin / reset password (asks for it)
 python scripts/compare_ocr.py scan.pdf --pages 1-3
 ```
@@ -98,6 +99,7 @@ question ─► cache(raw) ─► Call 1 normalize/classify (query_normalizer) �
         ─► Call 2 grounded answer citing [C…] / [W…] / [U…] (generation_service)
         ─► citation_validator (labels ∈ retrieved; every number, compared by value, ∈ cited chunks; markers → [১])
         ─► status answered | partial | refused | clarify  ─► query_logs + answer cache (refusals are never cached)
+        ─► route adds speech_token (HMAC of the answer) ─► UI 🔊 ─► POST /tts ─► GET /tts/<hash>.mp3 (ElevenLabs stream, cached)
 ```
 
 - **Layers:** `api/routes` call `services/orchestrator.py`. `repositories/` wrap Qdrant and BM25 (Postgres via `db/`). `models/` holds the Groq and embedding clients. `ingestion/` is offline only; `ingestion/dataset_indexer.py` is the per-step ingest core (`pipeline.py` is the legacy full rebuild).

@@ -3,18 +3,20 @@
 ## FastAPI Backend + Hybrid RAG + Evidence & Trust Layer
 
 **Project:** AdhikarAI\
-**Version:** 1.3 (as-built update)\
-**Prepared:** 21 November 2026, updated 22 November 2026\
+**Version:** 1.4 (as-built update)\
+**Prepared:** 21 November 2026, updated 23 November 2026\
 **Architecture:** Python + FastAPI end-to-end backend, Hybrid RAG, LLM
 generation, deterministic verification\
 **Languages:** Bangla (standard Bangla and one regional dialect), Banglish and English\
-**Interaction:** Voice-first input: questions can be spoken or typed; answers are shown as text with citations\
+**Interaction:** Voice-first input: questions can be spoken or typed; answers are shown as text with citations, and a 🔊 button reads them aloud\
 **Changes in 1.1:** voice input and spoken answers are now must-have; legacy-font (Bijoy) conversion added to PDF ingestion; one regional dialect added; free-tier cost note added. Nothing from 1.0 was removed.\
 **Changes in 1.2:** stack fixed to free services: Supabase (PostgreSQL), Qdrant Cloud free cluster, Groq free tier only for the LLM and the speech-to-text fallback (Whisper); embeddings stay local with `intfloat/multilingual-e5-base`. OCR kept and runs fully locally (Tesseract `ben` first, Surya OCR / EasyOCR / PaddleOCR as the local second engine); no cloud OCR. Text-to-speech (spoken answers) removed on the team's decision; voice input stays must-have. Browser speech recognition explained in Step 0.
 
 **Changes in 1.3:** added the as-built table below and the `general` area; §5, §6.5, §8.1, §12.4, §13, §17 and the demo in §18 now describe the code.
 
-## As built (22 November 2026)
+**Changes in 1.4 (23 Nov):** spoken answers are back, on the team's request: a 🔊 button reads the answer aloud with ElevenLabs text-to-speech (free tier, `eleven_v3`, Bangla), streamed and cached, with the browser's own voice as fallback. Added to §3, §4, §13.1, §13.3, §13.4b, §14, §16 and §18. No extra LLM call: the spoken text is the validated answer.
+
+## As built (23 November 2026)
 
 The design sections keep the original intent. Where they differ from this table, the table is what exists.
 
@@ -31,6 +33,7 @@ The design sections keep the original intent. Where they differ from this table,
 | Trust statuses (step 13) | changed | `answered`, `partial`, `refused`, `clarify` |
 | Conflict and outdated-source detection (§6.4, §12.3) | not built | only a repealed-act ranking penalty |
 | Voice (step 0) | built | continuous listening with a silence stop, bn/en switch, Whisper fallback (also for Brave) |
+| Spoken answers (§13.4b) | added 23 Nov | 🔊 শুনুন: ElevenLabs `eleven_v3` (Bangla), streamed, cached in `data/tts_cache/`; only HMAC-signed answers; personal-document answers use the browser voice only |
 | OCR (§7.2) | built | Tesseract, then EasyOCR. Surya, PaddleOCR and Docling are not wired |
 | Human source review (§6.3, §7.7) | not done | every source is `unverified` or `needs_review` |
 | Admin panel, personal documents | added | `/admin`, `/user-docs` |
@@ -141,6 +144,7 @@ flowchart TD
     POLICY -->|Supported| ANS[Answer with citations]
     POLICY -->|Partial / conflict| WARN[Qualified answer or escalation]
     POLICY -->|Insufficient evidence| ABSTAIN[Abstain / ask clarification]
+    ANS -.->|user taps 🔊| TTS[Read aloud: ElevenLabs eleven_v3, cached; browser voice fallback]
 
     subgraph Offline ingestion
       SRC[Official PDFs / HTML] --> REG[Source Registry]
@@ -173,7 +177,8 @@ separated modules. Microservices are not necessary on day one.
 -   **Model adapters:** embedding provider (local e5) and LLM provider
     (Groq) abstractions, so a model can be swapped by changing `.env`.
 -   **Evaluation layer:** benchmark runner and metric calculation.
--   **Voice layer:** speech-to-text for incoming questions, behind the
+-   **Voice layer:** speech-to-text for incoming questions, and
+    text-to-speech (ElevenLabs) for reading answers aloud, behind the
     same FastAPI app.
 
 A single deployable Python backend is easier to debug during a
@@ -243,6 +248,11 @@ requires it.
                           (bn-BD); Groq Whisper   questions to text
                           as fallback
 
+  Text-to-speech          ElevenLabs `eleven_v3`  Read answers aloud
+                          (free tier); browser    (🔊), cached per
+                          speechSynthesis as      answer
+                          fallback
+
   Audio conversion        ffmpeg                  Convert recorded audio
                                                   to WAV for the model
 
@@ -272,6 +282,7 @@ any service.
   ----------------- ---------------------------------------------------------
   LLM               Groq API free tier (never upgrade to the Developer plan)
   Speech-to-text    Browser speech recognition; Groq Whisper as fallback
+  Text-to-speech    ElevenLabs free tier (~10k characters/month, no card); audio cached per answer
   OCR               Local only: Tesseract `ben`; Surya / EasyOCR / PaddleOCR
   Embedding         `intfloat/multilingual-e5-base`, local (no API, no limit)
   PostgreSQL        Supabase Free plan (500 MB per project)
@@ -872,7 +883,8 @@ loop.
 
 Return a direct answer, simple explanation, supported next steps,
 source-backed required documents, source title/section/page,
-publication/effective date and limitations.
+publication/effective date and limitations. The UI can read the answer
+aloud (§13.4b).
 
 ## Step 15 --- feedback and observability
 
@@ -1054,6 +1066,8 @@ and live at `/docs` on the running API.
 | `/chat` | POST | ask a question |
 | `/chat/voice/transcribe` | POST | audio to text |
 | `/chat/voice` | POST | audio to answer |
+| `/tts` | POST | register a signed answer for read-aloud, get its audio URL |
+| `/tts/{key}.mp3` | GET | the answer's audio (streamed the first time, then cached) |
 | `/sources`, `/sources/documents/{id}`, `/sources/{chunk_id}` | GET | browse sources |
 | `/user-docs` | POST | attach a personal document |
 | `/user-docs/{id}` | GET, DELETE | inspect or remove it |
@@ -1077,7 +1091,8 @@ characters), optional `area`, `debug`, optional `user_doc_id`.
 
 `ChatResponse` in the same file: `status`, `answer`, `citations[]`,
 `normalized_question`, `area`, `warnings[]`, `trace`, `latency_ms`,
-`cached`, `request_id`. A citation has `marker`, `kind`
+`cached`, `request_id`, `speech_token` (lets the 🔊 button send this
+answer to `/tts`; null for personal-document answers or without a key). A citation has `marker`, `kind`
 (official, user, web), `chunk_id`, `act`, `section`, `title`, `citation`,
 `excerpt`, `source_url` and `notes`.
 
@@ -1091,6 +1106,25 @@ built in `api/dependencies.py`.
 `api/routes/voice.py` calls `services/stt_service.py`: ffmpeg to 16 kHz
 mono WAV, silence check, Groq Whisper (`language` bn or en), prompt-echo
 guard. Audio temp files are deleted.
+
+## 13.4b Read-aloud endpoints
+
+`api/routes/tts.py` calls `services/tts_service.py` and
+`models/tts_client.py`:
+
+1.  `/chat` and `/chat/voice` add `speech_token`, an HMAC of the answer
+    text (`core/security.sign_text`). Personal-document answers get none.
+2.  `POST /tts {text, token}` checks the token (403 otherwise), removes
+    citation markers, links and markdown, cuts long text at a sentence
+    end (`TTS_MAX_CHARS`), and returns `/api/v1/tts/<sha256>.mp3`.
+3.  `GET /tts/<key>.mp3` serves `data/tts_cache/<key>.mp3`, or streams
+    from ElevenLabs (`/stream`, `model_id=eleven_v3`, `language_code=bn`;
+    the API default `eleven_multilingual_v2` has no Bangla) while saving
+    the file. A second request for the same clip waits for that file.
+4.  429/5xx are retried with backoff (max 3); quota and other errors give
+    HTTP 503 and the UI falls back to the browser's Bangla voice.
+
+`warmup.py --tts` pre-generates the audio of the demo answers.
 
 ## 13.5 Orchestration
 
@@ -1124,6 +1158,8 @@ Recommended answer layout:
 7.  Helpful / not helpful feedback.
 8.  Large microphone button to ask by voice, with the recognized text
     shown for correction before sending.
+9.  🔊 শুনুন button that reads the answer aloud (one answer at a time),
+    for people who find listening easier than reading.
 
 Do not hide uncertainty in a tooltip. If the system cannot verify a fee,
 deadline or eligibility rule, show that limitation next to the answer.
@@ -1208,6 +1244,8 @@ Groq 429 (rate-limit) counts.
     essential.
 -   Redact secrets and personal data from logs.
 -   Do not store voice recordings after transcription.
+-   Send only answers the API produced (HMAC-signed) to text-to-speech,
+    and never answers about a personal document.
 -   Define retention and deletion policies.
 -   Keep an audit trail for source updates and admin actions.
 -   Apply timeouts and bounded retries to external APIs.
@@ -1255,6 +1293,7 @@ paste keys into chat or put them in code.
 -   Human-reviewed evaluation set.
 -   Baseline-versus-hybrid comparison.
 -   Voice input (Bangla speech-to-text).
+-   Spoken answers (🔊, ElevenLabs text-to-speech; added back 23 Nov).
 -   OCR for scanned PDF pages.
 -   Standard Bangla plus one regional dialect.
 
