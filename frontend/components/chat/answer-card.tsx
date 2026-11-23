@@ -158,7 +158,7 @@ export function AnswerCard({ response, onCite }: AnswerCardProps) {
 
         {response.status !== "clarify" && (
           <div className="flex flex-wrap items-center gap-1 border-t pt-3 text-sm">
-            <ListenButton text={response.answer} token={response.speech_token ?? null} />
+            <ListenButton text={response.answer} token={response.speech_token} />
             <button
               type="button"
               onClick={() => void copy()}

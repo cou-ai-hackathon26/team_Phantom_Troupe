@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 
 interface ListenButtonProps {
   text: string;
-  token: string | null;
+  /** From the /chat response; undefined means the backend predates read-aloud. */
+  token: string | null | undefined;
 }
 
 /** 🔊 শুনুন — reads the answer aloud for people who find listening easier than reading. */

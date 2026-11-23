@@ -1,11 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { API_URL, prepareSpeech } from "@/lib/api";
+import { API_URL, ApiError, prepareSpeech } from "@/lib/api";
 
 export type SpeakState = "idle" | "loading" | "playing";
 
-const NO_VOICE = "এই ব্রাউজারে বাংলা ভয়েস নেই। Chrome বা Android ফোনে চেষ্টা করুন।";
+// Desktop Chrome on Linux (and many Windows PCs) ships no Bangla voice; Android Chrome usually has one.
+const NO_VOICE = "এই ব্রাউজারে বাংলা ভয়েস নেই (Android ফোনের Chrome-এ থাকে)।";
+// Why the online (ElevenLabs) voice was not used — shown with NO_VOICE so the cause is visible.
+const WHY_OLD_BACKEND = "সার্ভারের পুরনো সংস্করণ চলছে, ব্যাকএন্ড রিস্টার্ট করুন।";
+const WHY_NO_TOKEN = "এই উত্তরের জন্য অনলাইন ভয়েস চালু নেই।";
+const WHY_AUDIO_FAILED = "অনলাইন ভয়েস চালানো যায়নি।";
 
 // Only one answer speaks at a time across the page.
 let stopActive: (() => void) | null = null;
@@ -54,10 +59,10 @@ export function useSpeechOutput() {
     };
   }, [stop]);
 
-  const speakWithBrowser = useCallback((text: string, run: number) => {
+  const speakWithBrowser = useCallback((text: string, run: number, why?: string) => {
     const voice = banglaVoice();
     if (!voice) {
-      setError(NO_VOICE);
+      setError(why ? `${why} ${NO_VOICE}` : NO_VOICE);
       setState("idle");
       return;
     }
@@ -73,7 +78,8 @@ export function useSpeechOutput() {
   }, []);
 
   const speak = useCallback(
-    async (text: string, token: string | null) => {
+    /** token: string = online voice allowed; null = server said browser voice only; undefined = old backend. */
+    async (text: string, token: string | null | undefined) => {
       stopActive?.();
       stopActive = stop;
       const run = ++runRef.current;
@@ -82,11 +88,12 @@ export function useSpeechOutput() {
 
       if (token) {
         let fellBack = false;
-        const fallBack = () => {
+        const fallBack = (why: string, detail?: unknown) => {
           if (fellBack || run !== runRef.current) return;
           fellBack = true;
           audioRef.current = null;
-          speakWithBrowser(text, run);
+          console.warn("[tts] online voice failed, using the browser voice:", detail ?? why);
+          speakWithBrowser(text, run, why);
         };
         try {
           const { audio_url } = await prepareSpeech(text, token);
@@ -95,14 +102,14 @@ export function useSpeechOutput() {
           audioRef.current = audio;
           audio.onplaying = () => run === runRef.current && setState("playing");
           audio.onended = () => run === runRef.current && setState("idle");
-          audio.onerror = fallBack;
+          audio.onerror = () => fallBack(WHY_AUDIO_FAILED, audio.error);
           await audio.play();
-        } catch {
-          fallBack();
+        } catch (err) {
+          fallBack(err instanceof ApiError ? err.message : WHY_AUDIO_FAILED, err);
         }
         return;
       }
-      speakWithBrowser(text, run);
+      speakWithBrowser(text, run, token === undefined ? WHY_OLD_BACKEND : WHY_NO_TOKEN);
     },
     [speakWithBrowser, stop],
   );
