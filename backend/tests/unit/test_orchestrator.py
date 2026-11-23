@@ -16,7 +16,7 @@ from app.repositories.qdrant_repository import DenseHit
 from app.schemas.chat import ChatRequest
 from app.schemas.ingestion import ChunkRecord
 from app.schemas.llm import AnswerOutput, NormalizeOutput
-from app.services.answer_cache import MemoryCache
+from app.services.answer_cache import MemoryCache, cache_key
 from app.services.citation_validator import numbers_in, validate_answer
 from app.services.orchestrator import Orchestrator
 from app.services.retrieval_service import Retriever
@@ -145,6 +145,8 @@ def test_numeric_mismatch_marks_partial_with_warning() -> None:
 
 def test_numbers_ignore_list_numbering_and_markers() -> None:
     assert numbers_in("১. প্রথম ধাপ\n২. দ্বিতীয় ধাপে ৬০ দিন") == {"60"}
+    assert numbers_in("প্রথম ধাপ। ২. দ্বিতীয় ধাপ। ৩. তৃতীয় ধাপে ৬০ দিন") == {"60"}
+    assert numbers_in("মোট ৪৫,০০০ টাকা") == {"45000"}
 
 
 def test_numbers_compare_by_value() -> None:
@@ -325,3 +327,38 @@ def test_refusals_are_not_cached() -> None:
     second = ask(orch)
     assert second.status == "refused" and not second.cached
     assert len(llm.calls) == 4  # both runs went through the pipeline again
+
+
+def test_round_bracket_labels_become_markers() -> None:
+    labelled = {"C1": CHUNKS[0], "C2": CHUNKS[1]}
+    out = AnswerOutput(answer="এক (C1) দুই (C1, C2)।", used_chunk_ids=["C1", "C2"], found=True)
+    v = validate_answer(out, labelled)
+    assert v.answer == "এক [১] দুই [১][২]।"
+    assert "C1" not in v.answer and v.status == "answered"
+
+
+def test_answer_without_inline_markers_gets_them_at_the_end() -> None:
+    labelled = {"C1": CHUNKS[0], "C2": CHUNKS[1]}
+    v = validate_answer(AnswerOutput(answer="উত্তর।", used_chunk_ids=["C2", "C1"], found=True), labelled)
+    assert v.answer == "উত্তর। [১][২]"
+    assert [c.marker for c in v.citations] == [1, 2] and v.used_chunk_ids == ["t-s2", "t-s1"]
+
+
+def test_cache_key_changes_with_pipeline_version(monkeypatch) -> None:
+    from app.services import answer_cache
+
+    before = cache_key("প্রশ্ন", None, "m", "raw")
+    assert before == cache_key("প্রশ্ন", None, "m", "raw")
+    monkeypatch.setattr(answer_cache, "PIPELINE_VERSION", "next")
+    answer_cache.pipeline_fingerprint.cache_clear()
+    try:
+        assert cache_key("প্রশ্ন", None, "m", "raw") != before
+    finally:
+        answer_cache.pipeline_fingerprint.cache_clear()
+
+
+def test_inline_list_number_after_marker_is_not_a_claimed_number() -> None:
+    labelled = {"C1": CHUNKS[0]}
+    out = AnswerOutput(answer="১. প্রথম ধাপ। [C1] ২. দ্বিতীয় ধাপ। [C1]", used_chunk_ids=["C1"], found=True)
+    v = validate_answer(out, labelled)
+    assert v.status == "answered" and not v.warnings

@@ -204,10 +204,16 @@ def test_exact_section_prefers_named_act() -> None:
     assert r.exact_section_ids("শ্রম (সংশোধন) আইন ২০২৬ ধারা ৪", "labour") == ["labour-amendment-2026-s৪"]
 
 
-def test_exact_section_uses_hits_then_primary_act() -> None:
+def test_exact_section_uses_primary_act_then_hits() -> None:
     r = _many_acts()
-    assert r.exact_section_ids("ধারা ৪", "labour", hint_ids=["labour-amendment-2026-s৪"]) == ["labour-amendment-2026-s৪"]
+    # plan 12.4: a bare "ধারা ৪" means the main act, even when an amendment or the EPZ act is among the hits
+    assert r.exact_section_ids("ধারা ৪", "labour", hint_ids=["labour-amendment-2026-s৪"]) == ["labour-act-2006-s৪"]
+    assert r.exact_section_ids("ধারা ৪", "labour", hint_ids=["bdlaws-act-1-s৪"]) == ["labour-act-2006-s৪"]
     assert r.exact_section_ids("ধারা ৪", "labour") == ["labour-act-2006-s৪"]
+    # no area and no act word in the query: the hits decide, amendments excluded
+    assert r.exact_section_ids("ধারা ৪", None, hint_ids=["labour-amendment-2026-s৪", "bdlaws-act-2-s৪"]) == [
+        "bdlaws-act-2-s৪"
+    ]
     assert r.exact_section_ids("ধারা ৪", "general") == ["bdlaws-act-2-s৪"]  # one act in the area: no filtering
 
 

@@ -160,3 +160,86 @@ def test_eval_latest_route(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(evaluation, "RESULTS", path)
     body = TestClient(app).get("/api/v1/eval/latest").json()
     assert body["model"] == "m" and "details" not in body
+
+
+# ---- scope rules (plan 12.1, 12.3, 12.4). Synthetic placeholder text only.
+
+
+def _doc_chunk(cid: str, doc: str, act: str, text: str, area: str = "labour", section: str = "১") -> ChunkRecord:
+    return _chunk(cid, section, text, area=area).model_copy(update={"document_id": doc, "act": act, "title": cid})
+
+
+def _cands(*ids: str):  # noqa: ANN202
+    from app.services.fusion_service import FusedCandidate
+
+    return [FusedCandidate(chunk_id=i, fused_score=1.0 / n) for n, i in enumerate(ids, start=1)]
+
+
+def test_document_programmes_title_wins_then_majority_of_mentions() -> None:
+    from app.services.retrieval_service import document_programmes
+
+    chunks = {
+        c.id: c
+        for c in [
+            _doc_chunk("t1", "titled", "বয়স্ক ভাতা নির্দেশিকা", "বিধবা বিধবা বিধবা বিধবা বিধবা বিধবা", "allowance"),
+            _doc_chunk("n1", "noisy", "গণপ্রজাতন্ত্রী", "বিধবা " * 6 + "বয়স্ক", "allowance"),
+            _doc_chunk("m1", "mixed", "গণপ্রজাতন্ত্রী", "বিধবা " * 3 + "প্রতিবন্ধী " * 3, "allowance"),
+            _doc_chunk("f1", "few", "গণপ্রজাতন্ত্রী", "প্রতিবন্ধী", "allowance"),
+        ]
+    }
+    assert document_programmes(chunks) == {"titled": "old_age", "noisy": "widow"}
+
+
+def test_query_naming_one_programme_drops_other_programme_documents() -> None:
+    from app.services.retrieval_service import diversify
+
+    chunks = {
+        "w": _doc_chunk("w", "widow-doc", "অ", "ক", "allowance"),
+        "o": _doc_chunk("o", "old-doc", "আ", "খ", "allowance"),
+        "g": _doc_chunk("g", "general-doc", "ই", "গ", "allowance"),
+    }
+    progs = {"widow-doc": "widow", "old-doc": "old_age"}
+    picked = diversify(_cands("w", "o", "g"), chunks, 5, query="বয়স্ক ভাতার যোগ্যতা", programmes=progs)
+    assert [c.chunk_id for c in picked] == ["o", "g"]
+    both = diversify(_cands("w", "o"), chunks, 5, query="বয়স্ক ও বিধবা ভাতা", programmes=progs)
+    assert [c.chunk_id for c in both] == ["w", "o"]  # two programmes named: no filter
+
+
+def test_epz_act_ranks_after_general_law_unless_named() -> None:
+    from app.services.retrieval_service import diversify
+
+    chunks = {
+        "epz": _doc_chunk("epz", "epz", "বাংলাদেশ ইপিজেড শ্রম আইন", "ক"),
+        "gen": _doc_chunk("gen", "gen", "বাংলাদেশ শ্রম আইন", "খ"),
+    }
+    assert [c.chunk_id for c in diversify(_cands("epz", "gen"), chunks, 5, query="ছাঁটাই")] == ["gen", "epz"]
+    named = diversify(_cands("epz", "gen"), chunks, 5, query="ইপিজেড শ্রমিকের ছাঁটাই")
+    assert [c.chunk_id for c in named] == ["epz", "gen"]
+
+
+def test_bare_section_goes_to_primary_act_not_an_amendment_in_the_hits() -> None:
+    main = _doc_chunk("main19", "labour-act-2006", "বাংলাদেশ শ্রম আইন, ২০০৬", "ক", section="১৯")
+    amend = _doc_chunk("amend19", "amend", "বাংলাদেশ শ্রম (সংশোধন) আইন, ২০২৬", "খ", section="১৯")
+    other = _doc_chunk("svc19", "svc", "সরকারি চাকরি আইন, ২০১৮", "গ", area="general", section="১৯")
+    r = Retriever(BM25Index.build([main, amend, other]), FakeQdrant([]), FakeEmbedder())  # type: ignore[arg-type]
+    assert r.exact_section_ids("শ্রম আইনের ধারা ১৯", area="labour", hint_ids=["amend19"]) == ["main19"]
+    assert r.exact_section_ids("শ্রম আইনের ধারা ১৯", area=None, hint_ids=["amend19", "svc19"]) == ["main19"]
+    assert r.exact_section_ids("শ্রম সংশোধন আইন ২০২৬ ধারা ১৯", area=None) == ["amend19"]
+    assert r.exact_section_ids("চাকরি আইন ধারা ১৯", area=None, hint_ids=["amend19", "svc19"]) == ["svc19"]
+
+
+def test_land_acquisition_rules_rank_last_unless_asked_but_tenancy_act_does_not() -> None:
+    from app.services.retrieval_service import special_scope
+
+    assert special_scope("স্থাবর সম্পত্তি অধিগ্রহণ ও হুকুমদখল বিধিমালা, ২০২৬", "নামজারি করতে কী কাগজ লাগে")
+    assert special_scope("পদ্মা বহুমুখী সেতু প্রকল্প (ভূমি অধিগ্রহণ) আইন, ২০০৯", "নামজারি")
+    assert not special_scope("স্থাবর সম্পত্তি অধিগ্রহণ ও হুকুমদখল আইন, ২০১৭", "জমি অধিগ্রহণের ক্ষতিপূরণ")
+    assert not special_scope("রাষ্ট্রীয় অধিগ্রহণ প্রজাস্বত্ব আইন, ১৯৫০", "নামজারি করতে কী কাগজ লাগে")
+
+
+def test_section_title_contained_in_query_is_boosted() -> None:
+    long_sec = _doc_chunk("long", "d", "পরীক্ষা আইন", "ক", section="৩০").model_copy(update={"title": "চূড়ান্ত পাওনা"})
+    titled = _doc_chunk("titled", "d", "পরীক্ষা আইন", "খ", section="২০").model_copy(update={"title": "ছাঁটাই"})
+    r = Retriever(BM25Index.build([long_sec, titled]), FakeQdrant([]), FakeEmbedder())  # type: ignore[arg-type]
+    assert r.title_match_ids("ছাঁটাই হলে শ্রমিক কী পায়", ["long", "titled"]) == ["titled"]
+    assert r.title_match_ids("মজুরি কত", ["long", "titled"]) == []

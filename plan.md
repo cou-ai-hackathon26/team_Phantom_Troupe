@@ -281,13 +281,27 @@ Risk: Supabase free tier is 500 MB. Watch `pg_database_size` after every step an
 
 Wrong answers, highest priority:
 
-- [ ] 12.1 **Wrong programme:** `বয়স্ক ভাতা পাওয়ার যোগ্যতা কী?` is `answered` with the **widow** allowance rules (age, income), merges two versions with different income limits and leaks `(C1)`/`(C2)` into the text.
-- [ ] 12.2 **Meaning reversed:** Call 1 turns the dialect `…টেকা পাইবো নি?` (will they get money?) into `…পাবো না?` (won't get). 120b did the same in the 21 Nov comparison. Retest with 20b and decide the model.
-- [ ] 12.3 **Wrong act:** both lay-off questions cite the EPZ Labour Act for a general worker. Its service requirement differs from Labour Act 2006 §16, so the answer is wrong for most workers.
-- [ ] 12.4 **Wrong section:** `শ্রম আইনের ধারা ১৯` returns §19 of the 2026 Amendment Act instead of the 2006 Act. Naming the act and year works.
-- [ ] 12.5 **Unstable:** the retrenchment question was `answered` once and `partial` twice (entitlements missing, labels leaked). Its Banglish form mixes in the EPZ act.
-- [ ] 12.6 **Core question refused:** `জমির নামজারি করতে কী কী কাগজ লাগে?` → `validation:not_found`.
-- [ ] 12.7 **Dropped or wrong detail:** the probation answer drops the skilled-worker condition on extension, and the GD answer expands জিডি as "ডিজিটাল অভিযোগ". Some answers have citations but no inline markers.
+- [x] 12.1 **Wrong programme:** `বয়স্ক ভাতা পাওয়ার যোগ্যতা কী?` is `answered` with the **widow** allowance rules (age, income), merges two versions with different income limits and leaks `(C1)`/`(C2)` into the text.
+- [x] 12.2 **Meaning reversed:** Call 1 turns the dialect `…টেকা পাইবো নি?` (will they get money?) into `…পাবো না?` (won't get). 120b did the same in the 21 Nov comparison. Retest with 20b and decide the model.
+- [x] 12.3 **Wrong act:** both lay-off questions cite the EPZ Labour Act for a general worker. Its service requirement differs from Labour Act 2006 §16, so the answer is wrong for most workers.
+- [x] 12.4 **Wrong section:** `শ্রম আইনের ধারা ১৯` returns §19 of the 2026 Amendment Act instead of the 2006 Act. Naming the act and year works.
+- [x] 12.5 **Unstable:** the retrenchment question was `answered` once and `partial` twice (entitlements missing, labels leaked). Its Banglish form mixes in the EPZ act.
+- [x] 12.6 **Core question refused:** `জমির নামজারি করতে কী কী কাগজ লাগে?` → `validation:not_found`.
+- [x] 12.7 **Dropped or wrong detail:** the probation answer drops the skilled-worker condition on extension, and the GD answer expands জিডি as "ডিজিটাল অভিযোগ". Some answers have citations but no inline markers.
+
+Fixed 23 Nov (checked end to end on `openai/gpt-oss-20b` with the web client, fresh cache, 9 questions; 190 tests):
+- 12.1: allowance chunks from a document about another programme are dropped when the query names one programme
+  (`retrieval_service.document_programmes`: programme in the title, else the majority of mentions). `(C1)` labels become markers.
+- 12.3, 12.5: special-scope acts (EPZ; land acquisition/হুকুমদখল) rank after general law unless the query asks for them.
+  Chunks whose whole section title is in the query get an RRF boost, so "ছাঁটাই" brings §20.
+- 12.4: a bare "ধারা N" goes to the area's primary act before any act among the hits; amendment acts only when named.
+- 12.2: `normalize.md` rules for sentence-final "নি" (= কি) and the dialect subject ending "-এ". 0/12 reversals on
+  both models; 120b still changes the person ("পাবো", "মালিককে দেবো") and turns "paona" into "ভাতা", so **20b is recommended**.
+- 12.6: the corpus has no namjari document list, so refusal is correct. The acquisition rules' compensation-claim list was
+  once given as the namjari list; the special-scope rule stops that. Kept off the demo (team decision, 23 Nov).
+- 12.7: `answer_bn.md` keeps every condition/proviso, never expands abbreviations the passages don't, and uses only the
+  named programme; answers with no inline marker get markers appended by the validator.
+- The answer cache key now includes `PIPELINE_VERSION` and a hash of the prompts, so pre-fix answers are never served.
 
 Tooling and trust:
 

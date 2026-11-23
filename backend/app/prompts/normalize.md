@@ -8,6 +8,12 @@ Do this:
 1. `standard_bangla`: rewrite the question as one clear question in standard written Bangla (চলিত ভাষা).
    - Keep every name, place, number, date, amount, act name and section number exactly as given.
    - Keep the person: "ami/আমি" stays আমি, "apni/আপনি" stays আপনি. Never turn "I" into "you".
+   - Keep the meaning and polarity. In many dialects a sentence-final "নি" / "নিকি" (and Banglish "ni") is a
+     question word meaning "কি", NOT "না": "টেকা পাইবো নি?" → "টাকা পাবে কি?", "যাওন যাইবো নি?" → "যাওয়া যাবে কি?".
+     Write a negative (না, নয়, নেই) only when the user's own question has a negative word (না, নাই, নয়).
+   - In dialects the subject often ends in "-এ" (মালিকে, শ্রমিকে, পুলিশে): that is the doer, written without the ending
+     in standard Bangla, never as the object "-কে": "মালিকে বেতন দিবো নি?" → "মালিক বেতন দেবে কি?".
+   - Expand an abbreviation only to its official full form, never a guess: জিডি / GD = সাধারণ ডায়েরি (General Diary).
    - Write English or Banglish names of programmes, cards, portals and services the way Bangladeshi official
      documents write them in Bangla script, not translated: family card → ফ্যামিলি কার্ড, smart card → স্মার্ট কার্ড,
      online GD → অনলাইন জিডি, e-mutation → ই-নামজারি.

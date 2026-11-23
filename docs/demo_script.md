@@ -36,20 +36,19 @@ The warm-up script reads every line below that starts with `- Q`.
 - Q4: সংবিধানের অনুচ্ছেদ ২৭ কী বলে?
 - Q5: আজকে ঢাকার আবহাওয়া কেমন থাকবে?
 
-## Do not demo until fixed (`plan.md` Phase 12)
+## Do not demo
+
+Fixed on 23 Nov and checked once end to end on `openai/gpt-oss-20b`: old-age allowance, lay-off (also the dialect form),
+"শ্রম আইনের ধারা ১৯", retrenchment in Bangla and Banglish, probation, GD requirements. Re-check them after `warmup.py`
+before using any as an extra question.
 
 | Topic | What happens now |
 |---|---|
-| Old-age allowance eligibility (বয়স্ক ভাতা) | answers with widow-allowance rules |
-| Lay-off compensation, including the old dialect opener | wrong act; the dialect meaning is reversed |
-| "শ্রম আইনের ধারা ১৯" without the year | returns the 2026 Amendment Act |
-| Retrenchment dues (ছাঁটাই), Bangla or Banglish | unstable: partial, or mixes in the EPZ act |
-| Namjari documents | refused |
-| Probation period | can drop a legal condition |
-| GD requirements | expands জিডি wrongly and cites a compiled guide as official |
+| Namjari documents | refused: the corpus has no official namjari document list (correct, but don't show it as an answer) |
+| GD and allowance answers | cite compiled guides as official (plan 12.11) |
 | মূল্যায়ন tab in `/admin` | numbers are from the old 55-chunk corpus |
 
-Several of these are **starter suggestions on the home screen**, so don't tap those. If judges ask about these topics, say they are known open issues.
+If judges ask about these, say they are known open issues.
 
 ## If something fails
 

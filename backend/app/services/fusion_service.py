@@ -28,8 +28,10 @@ def reciprocal_rank_fusion(
     k: int = 60,
     top_n: int = 5,
     exact: Sequence[str] = (),
+    title_matches: Sequence[str] = (),
 ) -> list[FusedCandidate]:
-    """`exact` is a third ranked list (chunks whose section the query names explicitly)."""
+    """`exact` is a third ranked list (chunks whose section the query names explicitly);
+    `title_matches` a fourth (retrieved chunks whose whole section title appears in the query)."""
     by_id: dict[str, FusedCandidate] = {}
     for hit in dense:
         cand = by_id.setdefault(hit.chunk_id, FusedCandidate(hit.chunk_id, 0.0))
@@ -42,6 +44,9 @@ def reciprocal_rank_fusion(
     for rank, chunk_id in enumerate(exact, start=1):
         cand = by_id.setdefault(chunk_id, FusedCandidate(chunk_id, 0.0))
         cand.exact_section = True
+        cand.fused_score += 1.0 / (k + rank)
+    for rank, chunk_id in enumerate(title_matches, start=1):
+        cand = by_id.setdefault(chunk_id, FusedCandidate(chunk_id, 0.0))
         cand.fused_score += 1.0 / (k + rank)
     ordered = sorted(
         by_id.values(),

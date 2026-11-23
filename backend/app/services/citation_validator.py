@@ -4,6 +4,8 @@
 - labels/ids not among the retrieved chunks are dropped
 - every number in the answer must appear in a used chunk, otherwise status "partial" + warning
 - "[C2]" markers are rewritten to "[১]" … in order of first use; citations are built from stored metadata
+- labels written in round brackets ("(C1)", "(C1, C2)") are treated as markers, so they never leak into the text
+- an answer that cites passages in used_chunk_ids but has no inline marker gets the markers at its end
 """
 
 import re
@@ -15,7 +17,9 @@ from app.schemas.ingestion import ChunkRecord
 from app.schemas.llm import AnswerOutput
 
 _MARKER_GROUP = re.compile(r"\[\s*([CUW]\d+(?:\s*[,，、]\s*[CUW]\d+)*)\s*\]", re.IGNORECASE)
-_LIST_NUMBER = re.compile(r"(?m)^\s*[0-9০-৯]{1,2}\s*[.।)]\s+")
+_PAREN_GROUP = re.compile(r"[(（]\s*([CUW]\d+(?:\s*[,，、]\s*[CUW]\d+)*)\s*[)）]", re.IGNORECASE)
+# "১." list numbering at a line start, or inline after a sentence end or a marker ("… [C1] ২. পরের ধাপ")
+_LIST_NUMBER = re.compile(r"(?m)(?:^|(?<=[।.!?\]]))\s*[0-9০-৯]{1,2}\s*[.।)]\s+")
 _NUMBER = re.compile(r"[0-9০-৯]+(?:[.,][0-9০-৯]+)*")
 _BARE_MARKER = re.compile(r"\[\s*[0-9০-৯]{1,2}\s*\]")  # "[৫]" written by the model itself: not ours, drop
 _REPEATED_MARKER = re.compile(r"(\[[০-৯]+\])(?:\s*\1)+")
@@ -82,6 +86,7 @@ def _excerpt(text: str) -> str:
 def validate_answer(output: AnswerOutput, labelled: dict[str, ChunkRecord]) -> Validation:
     if not output.found or not output.answer.strip():
         return Validation("refused", "", reason="not_found")
+    output = output.model_copy(update={"answer": _PAREN_GROUP.sub(r"[\1]", output.answer)})
 
     used_labels: list[str] = []
     dropped: list[str] = []
@@ -117,6 +122,8 @@ def validate_answer(output: AnswerOutput, labelled: dict[str, ChunkRecord]) -> V
     answer = _MARKER_GROUP.sub(replace, _BARE_MARKER.sub("", output.answer))
     answer = _REPEATED_MARKER.sub(r"\1", answer).strip()
     answer = re.sub(r"[ \t]+\n", "\n", answer)
+    if not inline_order:  # cited in used_chunk_ids only: show the reader which sources back the answer
+        answer += " " + "".join(f"[{ascii_to_bn_digits(str(marker_of[label]))}]" for label in order)
 
     warnings: list[str] = []
     status = "answered"

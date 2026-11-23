@@ -7,6 +7,8 @@ storage errors never fail a request. Only answers the real pipeline produced are
 import hashlib
 import logging
 from collections import OrderedDict
+from functools import lru_cache
+from pathlib import Path
 from typing import Protocol
 
 from app.core.config import settings
@@ -15,8 +17,22 @@ from app.ingestion.text_normalizer import normalize_for_search
 logger = logging.getLogger(__name__)
 
 
+# Bump when retrieval or validation changes what an answer would be. Prompt edits are picked up automatically.
+PIPELINE_VERSION = "2026-11-23"
+PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
+
+
+@lru_cache
+def pipeline_fingerprint() -> str:
+    """PIPELINE_VERSION + a hash of the prompt files, so answers cached before a fix are never served after it."""
+    digest = hashlib.sha256(PIPELINE_VERSION.encode())
+    for path in sorted(PROMPTS_DIR.glob("*.md")):
+        digest.update(path.name.encode() + b"\0" + path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
 def cache_key(question: str, area: str | None, model: str | None, kind: str) -> str:
-    basis = "|".join([kind, normalize_for_search(question), area or "*", model or "-"])
+    basis = "|".join([kind, normalize_for_search(question), area or "*", model or "-", pipeline_fingerprint()])
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()
 
 
