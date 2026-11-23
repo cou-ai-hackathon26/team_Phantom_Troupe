@@ -13,11 +13,9 @@
 
 **Members**
 
-| Name | Role |
-|---|---|
-| _TODO: member name_ | _TODO: role_ |
-| _TODO: member name_ | _TODO: role_ |
-| _TODO: member name_ | _TODO: role_ |
+- Md Sazid Islam Sakib
+- Nahiyan Noor
+- Jihad Mia
 
 More detail: build plan and progress in [`plan.md`](plan.md), the architecture spec in [`docs/pipeline.md`](docs/pipeline.md), the demo in [`docs/demo_script.md`](docs/demo_script.md).
 
@@ -133,7 +131,7 @@ flowchart LR
 
 ### Evaluation so far
 
-- **212 automated tests** (LLM, network and database mocked) for parsing, chunking, retrieval, fusion, the orchestrator, citation validation, web fallback, TTS and dialect checks.
+- **214 automated tests** (LLM, network and database mocked) for parsing, chunking, retrieval, fusion, the orchestrator, citation validation, web fallback, TTS and dialect checks.
 - **Dialect normalization** (`scripts/eval_normalization.py`, 38 questions, 10 dialects): fully correct rewrites went from **21/38 to 34/38** after the dialect guide and code glossary, with **no reversed meanings** left (`plan.md` Phase 14). The test questions still need review by native speakers.
 - **Retrieval and answer accuracy are not measured yet**: the 24-question gold set (`data/evaluation/gold.jsonl`) waits for human labels.
 
