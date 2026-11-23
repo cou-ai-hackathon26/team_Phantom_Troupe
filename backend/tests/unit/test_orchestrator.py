@@ -362,3 +362,21 @@ def test_inline_list_number_after_marker_is_not_a_claimed_number() -> None:
     out = AnswerOutput(answer="১. প্রথম ধাপ। [C1] ২. দ্বিতীয় ধাপ। [C1]", used_chunk_ids=["C1"], found=True)
     v = validate_answer(out, labelled)
     assert v.status == "answered" and not v.warnings
+
+
+def test_extra_queries_are_searched_across_all_areas_with_two_llm_calls() -> None:
+    embedder, qdrant = RecordingEmbedder(), AreaQdrant()
+    retriever = Retriever(BM25Index.build(CHUNKS), qdrant, embedder)  # type: ignore[arg-type]
+    norm = NormalizeOutput(
+        standard_bangla="আলফা এবং বিটা দুই সমস্যা, এখন আমি কী করতে পারি?",
+        search_query="আলফা নিয়ম",
+        extra_queries=["বিটা নিয়ম", "আলফা নিয়ম", "গামা শব্দ", "ডেল্টা"],  # duplicate of search_query + one too many
+        area="labour",
+        in_scope=True,
+    )
+    llm = FakeLLM(norm, AnswerOutput(answer="আলফা [C1]", used_chunk_ids=["C1"], found=True))
+    resp = asyncio.run(Orchestrator(retriever, llm, MemoryCache()).run(ChatRequest(message="আলফা বিটা", debug=True)))  # type: ignore[arg-type]
+    assert embedder.queries == ["আলফা নিয়ম", "আলফা নিয়ম", "বিটা নিয়ম", "গামা শব্দ"]  # max 2 extras, no repeat
+    assert qdrant.areas == ["labour", None, None, None]
+    assert len(llm.calls) == 2
+    assert resp.status == "answered"

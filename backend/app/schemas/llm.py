@@ -10,6 +10,7 @@ class NormalizeOutput(BaseModel):
 
     standard_bangla: str = Field(min_length=1)
     search_query: str = ""  # retrieval-oriented rewrite; empty -> standard_bangla is searched
+    extra_queries: list[str] = Field(default_factory=list)  # other problems in the same question (retrieval only)
     area: Literal["land", "gd", "allowance", "labour", "general", "unknown"] = "unknown"
     in_scope: bool = True
     needs_clarification: bool = False

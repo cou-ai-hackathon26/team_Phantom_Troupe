@@ -1,7 +1,7 @@
 """Call 1: rewrite dialect / Banglish / English into standard Bangla and classify the area."""
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.ingestion.text_normalizer import normalize_text
 from app.models.llm_client import LLMBadOutput, LLMClient
@@ -22,6 +22,10 @@ class NormalizedQuery:
     needs_clarification: bool
     clarification_question: str | None
     llm_ok: bool  # False when Call 1 output was unusable and we fell back to the raw question
+    extra_queries: list[str] = field(default_factory=list)  # other problems in a multi-issue question
+
+
+MAX_EXTRA_QUERIES = 2
 
 
 async def normalize_query(llm: LLMClient, message: str) -> NormalizedQuery:
@@ -33,7 +37,7 @@ async def normalize_query(llm: LLMClient, message: str) -> NormalizedQuery:
             with_hints(message),
             NormalizeOutput,
             temperature=0.0,
-            max_tokens=500,
+            max_tokens=700,
             purpose="normalize",
         )
     except LLMBadOutput as exc:
@@ -43,13 +47,20 @@ async def normalize_query(llm: LLMClient, message: str) -> NormalizedQuery:
     out = result.data
     clarify = out.needs_clarification and bool(out.clarification_question)
     standard = normalize_text(out.standard_bangla) or message
+    search = normalize_text(out.search_query) or standard
+    extras: list[str] = []
+    for q in out.extra_queries:
+        q = normalize_text(q)
+        if q and q != search and q not in extras:
+            extras.append(q)
     return NormalizedQuery(
         original=message,
         standard_bangla=standard,
-        search_query=normalize_text(out.search_query) or standard,
+        search_query=search,
         area=None if out.area == "unknown" else out.area,
         in_scope=out.in_scope,
         needs_clarification=clarify,
         clarification_question=out.clarification_question if clarify else None,
         llm_ok=True,
+        extra_queries=extras[:MAX_EXTRA_QUERIES],
     )

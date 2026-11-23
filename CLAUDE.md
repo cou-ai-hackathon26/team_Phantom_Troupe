@@ -77,6 +77,7 @@ python scripts/eval_retrieval.py            # dense vs BM25 vs hybrid on retriev
 python scripts/test_llm_models.py openai/gpt-oss-20b --with-answer   # compare Groq models
 python scripts/run_eval.py --fresh          # full pipeline (no web fallback) on gold.jsonl -> data/evaluation/results.json
 python scripts/eval_normalization.py --sleep 25   # Call 1 on 38 dialect questions: meaning reversed? dialect left? (≈38 Groq calls)
+python scripts/run_dialect_suite.py           # team's 18 real-life dialect cases, full pipeline, graded (≈36 Groq calls, ≈150k tokens)
 python scripts/warmup.py                    # wake DBs, load e5, pre-cache docs/demo_script.md questions
 python scripts/warmup.py --tts              # also pre-generate their 🔊 audio (spends ElevenLabs credits once)
 python scripts/create_admin.py you@example.com   # create admin / reset password (asks for it)

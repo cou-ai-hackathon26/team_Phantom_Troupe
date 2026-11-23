@@ -44,3 +44,10 @@ async def test_normalizer_sends_hints_but_keeps_the_original() -> None:
     q = await normalize_query(llm, "নমুনা কিল্লাই?")  # type: ignore[arg-type]
     assert "Dialect hints" in seen["user"] and "কিল্লাই = কেন" in seen["user"]
     assert q.original == "নমুনা কিল্লাই?"
+
+
+def test_words_from_the_dialect_suite() -> None:
+    hints = dict(dialect_hints("আঁই টেঁয়া দিয়া জায়গা কিনছি, ভাই কাইল বিহাল থাইক্যা ফিরে নাই, হামার ছোঁয়াটা"))
+    assert hints["টেঁয়া"] == "টাকা" and hints["বিহাল"] == "বিকেল" and hints["থাইক্যা"] == "থেকে"
+    assert "গতকাল" in hints["কাইল"] and "ছেলে" in hints["ছোঁয়াটা"]
+    assert "স্বামী" in dict(dialect_hints("জামাই মারধর করে"))["জামাই"]

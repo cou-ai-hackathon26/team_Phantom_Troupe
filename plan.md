@@ -355,6 +355,24 @@ Last, in this order:
 
 **Cost:** the Call 1 prompt grew by 56% (≈1.6k → ≈2.5k input tokens), so an answer now uses ≈3.5k tokens of the 8k-per-minute and 200k-per-day free limits. All cached answers are invalidated (the cache key includes the prompt hash): run `warmup.py` again before the demo.
 
+## Phase 15 — Team dialect suite, 18 real-life cases (added 24 Nov)
+
+**Goal:** the team's 18-case suite (10 dialects; land, gd, allowance, labour, general and multi-sector cases) passes wherever our documents hold the answer. Dataset gaps are out of scope.
+
+- [x] 15.1 Suite in `data/evaluation/dialect_suite.json` (questions and expected laws from the team's test document) + `scripts/run_dialect_suite.py`: same orchestrator as the API (web fallback on), fresh cache, resumable, `--only`-style IDs, graded in code (answered, area, expected laws cited by act-title keywords). Results in `data/evaluation/results/dialect_suite.jsonl` (git-ignored)
+- [x] 15.2 Baseline on `gpt-oss-120b`: **4 pass, 2 partial, 12 fail**. Causes: Call 1 asked for clarification when users told a story without asking a question (4); Call 1 marked a missing person and a bounced cheque out of scope (2); Call 2 said "not found" although the right policy was retrieved (4); one area and one search per question, so multi-sector cases lost the other parts; dialect words left untranslated (কাইল বিহাল, টেঁয়া, জামাই …)
+- [x] 15.3 `prompts/normalize.md`: a story is a question (rewrite it, end with "এখন আমি আইনগতভাবে কী করতে পারি?"); keep the whole story before a short question; scope covers personal legal problems with no law named; area rules for missing persons and threats (gd) and crimes, snatching, fraud, cheques, dowry (general); search wording for these; new `extra_queries` (0–2) for multi-problem questions
+- [x] 15.4 `services/dialect_hints.py`: 36 glossary words from the suite; `schemas/llm.py` + `query_normalizer.py` + `orchestrator.py`: each extra query is one more all-areas retrieval fused into the ranking with one extra slot (still 2 LLM calls)
+- [x] 15.5 `prompts/answer_bn.md`: `found: false` only when no passage is about the problem; otherwise answer what the passages give and say which part is missing; answer each problem of a multi-problem question
+- [x] 15.6 Result: **11 pass, 3 partial, 4 fail**. Mixed models: TC-02/04/05/08/09/10 on `gpt-oss-120b`, the rest on `gpt-oss-20b` (120b hit its 200k/day cap mid-run). Remaining:
+  - Dataset (out of scope): the Penal Code and the Negotiable Instruments Act are titled `[রহিত]` in the index, so they rank last and are never cited (threat/theft parts of TC-01/15, TC-13, TC-17); no Muslim inheritance or partition passage is retrieved (TC-03)
+  - TC-17: Call 1 still files a snatching under gd and the answer is the online-GD steps (the trap the case tests)
+  - **TC-18 regression risk:** it now answers from the Family Card complaint procedure (wrong programme) instead of refusing. 20b ignores answer rule 9 here; a wrong-source answer is the Phase 12 class of defect
+  - TC-03 on 20b leaves Barishal words (যাওনের, বইনগো); 120b translated them
+- [ ] 15.7 Re-run all 18 on one model once its daily limit resets (`python scripts/run_dialect_suite.py --fresh`, ~150k tokens: most of one model's daily quota, so not on demo morning)
+
+**Cost:** Call 1 requests ≈4k tokens (prompt + 700 output cap). Both prompts changed, so cached answers are invalidated: run `warmup.py` again before the demo.
+
 ---
 
 ## Risks and mitigations

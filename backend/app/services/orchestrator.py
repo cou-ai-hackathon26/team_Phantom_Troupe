@@ -90,6 +90,11 @@ class Orchestrator:
             # (e.g. a lost NID classified as "general") cannot hide the right documents
             wide = await self.retriever.retrieve(run.search, area=None)
             run.retrieval = merge_results(run.retrieval, wide, top_n=settings.fused_top_k, k=settings.rrf_k)
+        # a multi-issue question (land grab + theft + threat): one more search per other problem, all areas,
+        # fused into the same ranking with one extra slot each so every problem can reach Call 2
+        for i, extra in enumerate(query.extra_queries, start=1):
+            more = await self.retriever.retrieve(extra, area=None)
+            run.retrieval = merge_results(run.retrieval, more, top_n=settings.fused_top_k + i, k=settings.rrf_k)
         gate = retrieval_gate(run.retrieval)
         web_passages = await self._web_fallback(run, gate.decision)
         if web_passages:

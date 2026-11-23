@@ -6,6 +6,11 @@ Noakhali, Barishal, Rangpur), Banglish (Bangla written in Latin letters) or Engl
 
 Do this:
 1. `standard_bangla`: rewrite the question as one clear question in standard written Bangla (চলিত ভাষা).
+   - Many users only tell what happened and ask nothing ("someone grabbed our land with a fake deed and threatens
+     us"). That is a question: rewrite the whole story in standard Bangla and end it with "এখন আমি আইনগতভাবে কী
+     করতে পারি?" (keep their own question instead, if they asked one).
+   - Keep the whole situation. When the user tells a story and then asks a short question ("আমি কি জিডি করব না
+     মামলা?"), rewrite the story AND the question; never keep only the question.
    - Keep every name, place, number, date, amount, act name and section number exactly as given.
    - Keep the person: "ami/আমি" stays আমি, "apni/আপনি" stays আপনি. Never turn "I" into "you".
    - Keep the meaning and polarity. In many dialects a sentence-final "নি" / "নিকি" (and Banglish "ni") is a
@@ -31,7 +36,9 @@ Do this:
        (করতি → করতে, যাতি → যেতে, পাতি → পেতে), -লি → -লে (গেলি → গেলে), -তিচে → -ছে (করতিচে → করছে),
        -বেনে → -বে (লাগবেনে → লাগবে); Chattogram গরা / গরে / গরিবার → করা / করে / করতে; Sylhet মাতা → বলা;
        -ওন লাগবো / -ন লাগবো → -তে হবে (করন লাগবো → করতে হবে).
-     · other words: টেকা, টাহা → টাকা; জাগা → জায়গা (land: জমি); অহন → এখন; আইজকা → আজ; লাইগা, লাগি, লাই → জন্য;
+     · other words: টেকা, টাহা, টেঁয়া, টেহা → টাকা; কাইল → গতকাল (past) / আগামীকাল (future); বিহাল → বিকেল;
+       ডর → ভয়; সোয়ামি → স্বামী; জামাই often means স্বামী (husband); ছোঁয়া (Rajshahi) → ছেলে; একান (Rangpur) → একটা;
+       এলা → এখন, এলাও → এখনো (Rangpur); ভাগি গেছে → পালিয়ে গেছে; থাকি, থিক্যা, থেইক্যা → থেকে (from); জাগা → জায়গা (land: জমি); অহন → এখন; আইজকা → আজ; লাইগা, লাগি, লাই → জন্য;
        ইটা, ইয়ান → এটা; মাইনসে → মানুষ; বাপ → বাবা; বুড়া → বয়স্ক; দরখাস্ত → আবেদন is fine but not required.
      · sound changes: dialects drop or swap sounds — অ for হ (অইছে → হয়েছে), হ for স/শ (হুনছি → শুনেছি), ফ for প
        (ফাইবো → পাবে). Rebuild the standard word. Keep land and office terms exactly as written, never respelled:
@@ -56,18 +63,29 @@ Do this:
    - "land"      — land services: namjari/mutation (নামজারি), khatian, porcha, land development tax (ভূমি উন্নয়ন কর/খাজনা), land records, land crimes.
    - "gd"        — police General Diary (জিডি/সাধারণ ডায়েরি), police station services, and anything lost or missing
                    (national ID card/NID, passport, phone, certificate, other documents or items) — these are reported by GD.
+                   Also a missing person (নিখোঁজ: someone has not come home, cannot be found) and a threat for which the
+                   user wants police protection but no crime has happened yet (হুমকি, নিরাপত্তাহীনতা).
    - "allowance" — government social allowances: old-age (বয়স্ক ভাতা), widow / husband-deserted women (বিধবা ভাতা), disability (প্রতিবন্ধী ভাতা).
    - "labour"    — workers' rights: appointment letter, service book (সার্ভিস বই), wages/salary, leave, working hours,
                    lay-off, retrenchment, dismissal, compensation, Labour Act (শ্রম আইন) and its sections.
    - "general"   — any other law, ordinance, rule or government policy of Bangladesh (e.g. right to information,
                    human rights commission, child, family, consumer, criminal or civil laws) that fits none of the four above.
+                   Crimes and disputes go here: theft, snatching or robbery (ছিনতাই — taken by force is a crime reported
+                   by a case, not a lost item: the area is "general" even when the user asks "should I file a GD?"), fraud, online shopping fraud, a
+                   bounced or dishonoured cheque (চেক ডিজঅনার), dowry (যৌতুক), domestic violence, family matters.
+   When a question has several problems in different areas (e.g. a work injury AND a disability allowance), pick
+   the area of the main problem, and use `extra_queries` (step 6) for the others.
    - "unknown"   — not about Bangladesh law or public services at all, or you cannot tell.
 3. `in_scope`: true if the question asks about rules, rights, eligibility, documents, fees or procedures
    in one of the areas above — including "what does section N of the law say" for any Bangladesh law.
+   A personal problem that a Bangladesh law or public service deals with is in scope even when the user names no
+   law: a crime against them, a missing person, a bounced cheque, fraud, dowry, an inheritance or land dispute,
+   unpaid wages, a stopped allowance.
    Greetings, chit-chat, general knowledge, laws of other countries, or requests to do
    something (write a letter, predict a case) are false.
 4. `needs_clarification`: true ONLY when the question is in scope but so vague that no search is possible
-   (e.g. just "ভাতা" or "আমার জমির সমস্যা"). Otherwise false.
+   (e.g. just "ভাতা" or "আমার জমির সমস্যা"). Otherwise false. A user who describes what happened (who did
+   what, to which land, money or person) has given enough to search: never ask them to clarify.
    `clarification_question`: when true, one short polite question in Bangla asking for the missing detail; else null.
 
 5. `search_query`: one standard-Bangla search phrase for finding the right passages in official documents.
@@ -85,7 +103,19 @@ Do this:
    - A complaint that an institution or office is not acting ("কর্তৃপক্ষ ব্যবস্থা নিচ্ছে না") becomes a search for who
      inspects, supervises or hears complaints about it, plus the problem itself, e.g.
      "বিশ্ববিদ্যালয় ভবনে ফাটল; বিশ্ববিদ্যালয় পরিদর্শন, তদারকি ও মঞ্জুরী কমিশন (University Grants Commission)".
+   - A described situation becomes a search for the law or procedure that deals with it, in official terms,
+     e.g. "জাল দলিলে জমি দখল ও ভূমি অপরাধের প্রতিকার", "চেক ডিজঅনার (dishonour of cheque) হলে প্রতিকার",
+     a missing person → "নিখোঁজ ব্যক্তির বিষয়ে থানায় সাধারণ ডায়েরি (জিডি) করার পদ্ধতি" (not গুম / enforced
+     disappearance unless the user says someone was taken by force), an inheritance dispute → "উত্তরাধিকার সূত্রে
+     প্রাপ্ত সম্পত্তির বণ্টন ও বাটোয়ারা (inheritance, partition)", a seller who took money online and sent a fake or
+     wrong product → "পণ্য বিক্রয়ে প্রতারণা ও ভোক্তা অধিকার বিরোধী কার্যের অভিযোগ (consumer rights)", a snatching
+     or robbery → "ছিনতাই বা দস্যুতা হলে থানায় মামলা বা এজাহার (FIR) দায়ের".
    - Do not add facts, numbers, laws or section numbers that the user did not say.
 
+6. `extra_queries`: a list of 0–2 more search phrases, ONLY when the question has separate problems that need
+   different laws or services (e.g. land grabbed with a fake deed + theft of the deed papers + a threat; a work
+   injury + a disability allowance; an allowance card + a broker who took money). One phrase per other problem,
+   written like `search_query`. Otherwise [].
+
 Reply with JSON only, exactly these keys:
-{"standard_bangla": "...", "search_query": "...", "area": "land|gd|allowance|labour|general|unknown", "in_scope": true, "needs_clarification": false, "clarification_question": null}
+{"standard_bangla": "...", "search_query": "...", "extra_queries": [], "area": "land|gd|allowance|labour|general|unknown", "in_scope": true, "needs_clarification": false, "clarification_question": null}
