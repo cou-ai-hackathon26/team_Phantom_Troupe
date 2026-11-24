@@ -146,8 +146,11 @@ def resolve_followup(query: NormalizedQuery, context: TurnContext) -> FollowupRe
 
 
 def apply_resolution(query: NormalizedQuery, resolution: FollowupResolution) -> NormalizedQuery:
-    """The pre-retrieval gate reads needs_clarification, so a follow-up CLARIFY stops there. Call 1's own
-    clarification flag (question too vague to search) is kept for every other intent: asking beats guessing."""
+    """The pre-retrieval gate reads needs_clarification, so a follow-up CLARIFY stops there. It is also marked in
+    scope: a bare "ওটা কি করা যাবে?" looks out of scope on its own, and the gate checks scope first, so it was
+    refused instead of asked. Call 1's own clarification flag is kept for every other intent."""
     if resolution.intent == "CLARIFY":
-        return replace(query, needs_clarification=True, clarification_question=resolution.clarification_question)
+        return replace(
+            query, needs_clarification=True, clarification_question=resolution.clarification_question, in_scope=True
+        )
     return query

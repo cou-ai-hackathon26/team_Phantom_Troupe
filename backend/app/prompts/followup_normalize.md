@@ -11,9 +11,13 @@ Decide how the new message relates to the history and add these two keys to your
   - "EXPAND": the same issue, asking for more or different information (e.g. "তাহলে কোথায় অভিযোগ করব?" after a
     question about unpaid wages: where to complain was not the earlier question).
   - "NEW_TOPIC": a different problem, or a message that is a complete question on its own about something else.
-  - "CLARIFY": the message points back ("ওটা", "এটা", "সেটা", "আগেরটা", "oita") but more than one earlier issue
-    could be meant, or you cannot tell which. Then also set "needs_clarification": true and write one short,
-    polite "clarification_question" in Bangla that names the possible issues.
+  - "CLARIFY": the message points back but you cannot tell which earlier issue it means. Then also set
+    "needs_clarification": true and write one short, polite "clarification_question" in Bangla that names the
+    possible issues.
+  Which turn a reference means: "এটা", "এটার", "এই", "এর", "এখানে", "তাহলে" and Banglish "eta", "etar", "tahole"
+  point to the MOST RECENT turn [Tn]: use CONTINUE or EXPAND with that turn, not CLARIFY. Use CLARIFY only when
+  the message points away from the latest turn ("ওটা", "সেটা", "আগেরটা", "oita", "ager ta") and two or more
+  earlier issues could be meant, or when nothing in the history fits the message.
 - "referenced_turns": the labels of the earlier turns the message refers to, e.g. ["T2"]. Use only labels that
   appear in the history. [] for NEW_TOPIC.
 

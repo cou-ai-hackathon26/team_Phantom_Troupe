@@ -549,3 +549,21 @@ def test_api_rejects_another_users_conversation(api) -> None:
         r = client.post("/api/v1/chat", json={"message": "আর কী?", "conversation_id": first["conversation_id"]} | extra)
         assert r.status_code == 404 and r.json()["detail"]["code"] == "conversation_expired"
     assert len(llm.calls) == 2  # rejected before any LLM call
+
+
+def test_clarify_follow_up_is_asked_even_if_call_1_marks_it_out_of_scope() -> None:
+    llm = ScriptedLLM()
+    service, _ = make_service(llm)
+    _, conv = first_wage_turn(llm, service)
+    llm.push(
+        NormalizeOutput(
+            standard_bangla="ওটা কি করা যাবে?",
+            area="unknown",
+            in_scope=False,  # a bare reference looks out of scope on its own
+            followup_intent="CLARIFY",
+            needs_clarification=True,
+            clarification_question="আপনি কোন বিষয়ের কথা বলছেন?",
+        )
+    )
+    resp = ask(service, "ওটা কি করা যাবে?", conv)
+    assert resp.status == "clarify" and resp.answer == "আপনি কোন বিষয়ের কথা বলছেন?"
