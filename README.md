@@ -51,6 +51,7 @@ AdhikarAI gives general information, not legal advice.
 - **Web fallback** — when local evidence is weak, search limited to an allow-list of official government websites; web citations are marked "verify on the linked page".
 - **🔊 Read aloud** — ElevenLabs Bangla voice, streamed and cached; the browser's voice as fallback.
 - **📎 Personal documents** — PDF or photo, local OCR, kept in memory for one hour, cited separately as "আপনার নথি", never as law.
+- **💬 Follow-up questions** — ask "তাহলে কোথায় অভিযোগ করব?" without repeating the story. Earlier sources are reloaded and re-checked (still present, unchanged, not repealed, relevant) before reuse, and each answer cites its own sources. Conversations stay in memory only (2 hours) and belong to the browser tab that started them.
 - **Source browser** (`/sources`), **admin panel** (`/admin`: upload, OCR, index, delete documents), **retrieval trace** (`/?debug`) and **👍/👎 feedback**.
 
 ## How the AI works (AI engineering pipeline)
@@ -206,6 +207,8 @@ On the chat screen, 📎 attaches a PDF or photo (deed, appointment letter, noti
 ## What is stored about questions
 
 With Postgres configured, `query_logs` keeps the normalized question and, when it is short and has no phone or NID-like number, the original. The normalized question, the answer cache and the query sent to Tavily are **not redacted**, so users are told not to type personal details. Questions about a personal document store no text.
+
+Follow-up conversations (the citizen's messages, each answer's text and the ids of the sources it cited) are kept only in the API process's memory for `CONVERSATION_TTL_MINUTES` (120) after the last message, and are lost on restart. For a personal-document answer the answer text and the document passages are not kept.
 
 The audio of answers read aloud is kept in `data/tts_cache/` (git-ignored), named by a hash of the spoken text. Delete the folder to clear it; files are regenerated on demand.
 

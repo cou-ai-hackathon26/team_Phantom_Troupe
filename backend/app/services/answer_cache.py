@@ -22,11 +22,18 @@ PIPELINE_VERSION = "2026-11-23"
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
 
+# Prompts used only for follow-up turns. Follow-up answers are never cached, so these files cannot make a
+# cached answer stale and are left out of the fingerprint (editing them must not discard the warm demo cache).
+UNCACHED_PROMPT_PREFIX = "followup_"
+
+
 @lru_cache
 def pipeline_fingerprint() -> str:
     """PIPELINE_VERSION + a hash of the prompt files, so answers cached before a fix are never served after it."""
     digest = hashlib.sha256(PIPELINE_VERSION.encode())
     for path in sorted(PROMPTS_DIR.glob("*.md")):
+        if path.name.startswith(UNCACHED_PROMPT_PREFIX):
+            continue
         digest.update(path.name.encode() + b"\0" + path.read_bytes())
     return digest.hexdigest()[:16]
 

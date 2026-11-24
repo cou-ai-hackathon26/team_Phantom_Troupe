@@ -19,6 +19,9 @@ export interface ChatRequest {
   area?: Area;
   debug?: boolean;
   user_doc_id?: string;
+  /** Follow-up mode: both from the first response of this chat. Omit both to start a new conversation. */
+  conversation_id?: string;
+  conversation_token?: string;
 }
 
 export interface Citation {
@@ -53,7 +56,13 @@ export interface Trace {
   llm_calls: number;
   model: string | null;
   gate: string;
+  /** Follow-up mode: how the question relates to the earlier ones; null for a first question. */
+  followup_intent?: FollowupIntent | null;
+  reused_chunk_ids?: string[];
+  dropped_reuse?: Record<string, string>;
 }
+
+export type FollowupIntent = "CONTINUE" | "EXPAND" | "NEW_TOPIC" | "CLARIFY";
 
 export interface ChatResponse {
   status: Status;
@@ -68,10 +77,14 @@ export interface ChatResponse {
   request_id: string | null;
   /** Lets the 🔊 button send this answer to /tts (ElevenLabs). Null: browser voice only (e.g. personal documents). */
   speech_token?: string | null;
+  conversation_id?: string | null;
+  /** Only in the first response of a conversation: keep it with conversation_id for the follow-ups. */
+  conversation_token?: string | null;
+  turn_id?: string | null;
 }
 
 export interface ApiErrorDetail {
-  code: string; // rate_limited | llm_not_configured | llm_unavailable | index_missing | user_doc_expired | unauthorized | …
+  code: string; // rate_limited | llm_not_configured | llm_unavailable | index_missing | user_doc_expired | conversation_expired | conversation_busy | unauthorized | …
   message: string;
 }
 

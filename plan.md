@@ -373,6 +373,21 @@ Last, in this order:
 
 **Cost:** Call 1 requests ≈4k tokens (prompt + 700 output cap). Both prompts changed, so cached answers are invalidated: run `warmup.py` again before the demo.
 
+## Phase 16 — Follow-up questions with source continuity (added 24 Nov, judges' request)
+
+**Goal:** a citizen can ask a follow-up ("তাহলে আমি কোথায় অভিযোগ করব?") without repeating the context; an earlier cited source is reused only after it is reloaded and re-checked, and every answer cites its own sources. Spec: `adhikarai_followup_source_continuity.md`. Branch `feature/followup-conversation`.
+
+- [x] 16.1 `services/conversation_store.py`: conversations in process memory only (TTL `CONVERSATION_TTL_MINUTES`, max `CONVERSATION_MAX_COUNT`), behind a `ConversationStore` interface. Ownership by a random per-conversation secret token (SHA-256 stored, constant-time check; wrong token = unknown id = 404). One message at a time per conversation (409). Turns appended in pairs only after a complete answer; each assistant turn keeps its citation → canonical chunk id, document id, content hash, retrieval method, rank
+- [x] 16.2 Resolver folded into Call 1 (still ≤2 LLM calls): with history, `prompts/followup_normalize.md` + the last 3 exchanges (questions and cited source titles, no answer prose) give `followup_intent` (CONTINUE / EXPAND / NEW_TOPIC / CLARIFY) and `referenced_turns`; `services/followup_resolver.py` validates them (only shown labels, unknown intent or Call 1 fallback → fresh retrieval, CLARIFY without a question → fresh retrieval)
+- [x] 16.3 `services/evidence.py`: CONTINUE/EXPAND reload the referenced turn's cited chunks from the live index and reuse them only if official, still present, unchanged (hash), not `[রহিত]`, and relevant (in the fresh results or sharing a distinctive term). Reused first, then fresh hybrid results, deduplicated, same prompt size. Fresh retrieval always runs; a weak score gate no longer refuses when verified earlier evidence exists
+- [x] 16.4 Call 2 for CONTINUE/EXPAND gets `prompts/followup_answer.md` + the referenced exchanges (300-character answer excerpt marked "not evidence") + the citizen's original message. Citation labels and markers are rebuilt every turn; the validator and trust policy are unchanged
+- [x] 16.5 Follow-ups never read or write the answer cache; `followup_*.md` prompts are excluded from the cache fingerprint, so this phase does not invalidate the warm demo cache
+- [x] 16.6 API: `conversation_id` + `conversation_token` on `/chat` (optional; old clients still work), response adds `conversation_id`, `turn_id` and, once, `conversation_token`; trace adds `followup_intent`, `reused_chunk_ids`, `dropped_reuse`. Frontend keeps the conversation for the page, "নতুন কথোপকথন" starts a new one, an expired conversation is forgotten so retry starts fresh; the `?debug` trace shows the follow-up decision
+- [x] 16.7 27 unit tests (`tests/unit/test_followup.py`); live check on `gpt-oss-120b`: the spec's unpaid-wage example → EXPAND, resolved to "মালিক তিন মাস ধরে মজুরি না দিলে আমি কোথায় অভিযোগ করব?", §১৯৬খ reused + 2 new sources cited, 2 LLM calls, wrong token → 404
+- [ ] 16.8 Try 3–4 follow-up chains in the UI before the demo (each follow-up is 2 uncached Groq calls, ≈4–5k tokens)
+
+**Cost:** follow-ups are never cached, and their Call 1 carries the history (≈+300 tokens). Personal-document answers are not kept in the conversation (text dropped, `[U…]` citations never stored).
+
 ---
 
 ## Risks and mitigations
@@ -411,3 +426,4 @@ Last, in this order:
 - Voice input was checked with a scripted recognizer and Chromium's fake microphone, not yet with a real microphone.
 - Read-aloud: the ElevenLabs free tier is about 10k characters a month and this key can't read its balance. Answers over `TTS_MAX_CHARS` (1,500) are spoken only up to a sentence end. The browser fallback needs a Bangla system voice, which desktop Chrome on Linux lacks. `data/tts_cache/` has no size limit, and audio of answers that later change stays until the folder is deleted.
 - Admin jobs and personal documents live in the API process's memory: a restart loses running job status and attached personal documents (by design for personal documents). Run a single API worker.
+- Follow-up conversations also live in process memory: a restart or page reload starts a new conversation, and several API workers would not share them (a Redis `ConversationStore` would). The `/voice` route answers without conversation context. Reused-source relevance is a lexical check; whether the passage really supports the answer is left to Call 2 and the validator.

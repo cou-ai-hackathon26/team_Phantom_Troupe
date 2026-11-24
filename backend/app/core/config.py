@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     user_doc_ttl_minutes: int = 60
     user_doc_max_count: int = 200
 
+    # Follow-up conversations: kept in this process's memory only (services/conversation_store.py).
+    conversation_ttl_minutes: int = 120  # sliding: each answered turn extends it
+    conversation_max_count: int = 1000  # oldest conversations are evicted beyond this
+    conversation_history_exchanges: int = 3  # earlier question/answer pairs shown to Call 1 (token budget)
+    conversation_max_reused_sources: int = 3  # earlier cited chunks that may be reused in one answer
+
     @field_validator(
         "database_url",
         "qdrant_url",

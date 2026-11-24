@@ -10,6 +10,10 @@ class ChatRequest(BaseModel):
     area: Area | None = None
     debug: bool = False
     user_doc_id: str | None = Field(None, max_length=64)  # a personal document uploaded via /user-docs
+    # Follow-up mode: both come from an earlier response of the same chat. No id = a new conversation.
+    # The token is the conversation's secret (proof of ownership); the id alone grants nothing.
+    conversation_id: str | None = Field(None, max_length=64)
+    conversation_token: str | None = Field(None, max_length=128)
 
 
 class Citation(BaseModel):
@@ -44,6 +48,9 @@ class Trace(BaseModel):
     llm_calls: int
     model: str | None
     gate: str  # which decision ended the pipeline
+    followup_intent: str | None = None  # CONTINUE | EXPAND | NEW_TOPIC | CLARIFY; None = first question
+    reused_chunk_ids: list[str] = Field(default_factory=list)  # earlier sources re-checked and reused
+    dropped_reuse: dict[str, str] = Field(default_factory=dict)  # earlier source -> why it was not reused
 
 
 class ChatResponse(BaseModel):
@@ -58,8 +65,18 @@ class ChatResponse(BaseModel):
     cached: bool = False
     request_id: str | None = None
     speech_token: str | None = None  # lets the 🔊 button send this answer to /tts; None = browser voice only
+    conversation_id: str | None = None  # send back with the next message of this chat
+    conversation_token: str | None = None  # only in the first response of a conversation; keep it with the id
+    turn_id: str | None = None  # this assistant turn
 
 
 class ErrorDetail(BaseModel):
-    code: Literal["rate_limited", "llm_not_configured", "llm_unavailable", "index_missing"]
+    code: Literal[
+        "rate_limited",
+        "llm_not_configured",
+        "llm_unavailable",
+        "index_missing",
+        "conversation_expired",
+        "conversation_busy",
+    ]
     message: str

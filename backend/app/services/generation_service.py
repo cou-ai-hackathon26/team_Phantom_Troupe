@@ -54,7 +54,19 @@ def label_web_passages(passages) -> dict:  # noqa: ANN001 - list[WebPassageSourc
     return {f"W{i}": p for i, p in enumerate(passages, start=1)}
 
 
-def build_user_message(question: str, labelled: dict) -> str:  # noqa: ANN001 - ChunkRecord | User/WebPassageSource
+@dataclass(frozen=True)
+class FollowupPrompt:
+    """Conversation context for a follow-up answer: context only, never evidence (prompts/followup_answer.md)."""
+
+    original_message: str  # the citizen's new message as written
+    history: str  # <conversation_history> block (followup_resolver.answer_history_block)
+
+
+def build_user_message(
+    question: str,
+    labelled: dict,  # noqa: ANN001 - ChunkRecord | User/WebPassageSource
+    followup: FollowupPrompt | None = None,
+) -> str:
     official, personal, web = [], [], []
     for label, chunk in labelled.items():
         kind = getattr(chunk, "kind", "official")
@@ -65,8 +77,14 @@ def build_user_message(question: str, labelled: dict) -> str:  # noqa: ANN001 - 
         else:
             part = f" (অংশ {chunk.part})" if chunk.part else ""
             official.append(f"[{label}] {chunk.citation}{part} — {chunk.title}\n{chunk.text}")
+    head = ""
+    if followup is not None:
+        head = f"{followup.history}\n\nনাগরিকের নতুন বার্তা: {followup.original_message}\n"
+        question = f"{question} (আগের প্রসঙ্গসহ পূর্ণ প্রশ্ন)"
     message = (
-        f"প্রশ্ন: {question}\n\n<sources>\n" + ("\n\n".join(official) or "(কোনো সরকারি সূত্র পাওয়া যায়নি)") + "\n</sources>"
+        f"{head}প্রশ্ন: {question}\n\n<sources>\n"
+        + ("\n\n".join(official) or "(কোনো সরকারি সূত্র পাওয়া যায়নি)")
+        + "\n</sources>"
     )
     if web:
         message += "\n\n<web_sources>\n" + "\n\n".join(web) + "\n</web_sources>"
@@ -75,16 +93,23 @@ def build_user_message(question: str, labelled: dict) -> str:  # noqa: ANN001 - 
     return message
 
 
-async def generate_answer(llm: LLMClient, question: str, labelled: dict) -> LLMResult[AnswerOutput]:  # noqa: ANN001
+async def generate_answer(
+    llm: LLMClient,
+    question: str,
+    labelled: dict,  # noqa: ANN001
+    followup: FollowupPrompt | None = None,
+) -> LLMResult[AnswerOutput]:
     kinds = {getattr(c, "kind", "official") for c in labelled.values()}
     system = load_prompt("answer_bn")
+    if followup is not None:
+        system += "\n\n" + load_prompt("followup_answer")
     if "web" in kinds:
         system += "\n\n" + load_prompt("answer_web")
     if "user" in kinds:
         system += "\n\n" + load_prompt("answer_user_doc")
     return await llm.complete_json(
         system,
-        build_user_message(question, labelled),
+        build_user_message(question, labelled, followup),
         AnswerOutput,
         temperature=0.1,
         max_tokens=1200,

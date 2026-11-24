@@ -23,21 +23,34 @@ class NormalizedQuery:
     clarification_question: str | None
     llm_ok: bool  # False when Call 1 output was unusable and we fell back to the raw question
     extra_queries: list[str] = field(default_factory=list)  # other problems in a multi-issue question
+    followup_intent: str | None = None  # follow-up mode only: CONTINUE | EXPAND | NEW_TOPIC | CLARIFY
+    referenced_turns: list[str] = field(default_factory=list)  # history labels ("T1"), validated by the caller
 
 
 MAX_EXTRA_QUERIES = 2
 
 
-async def normalize_query(llm: LLMClient, message: str) -> NormalizedQuery:
-    """LLM errors other than bad output (rate limit, outage) propagate to the caller."""
+FOLLOWUP_MESSAGE_HEADER = "নতুন বার্তা (এটিকেই rewrite ও classify করতে হবে):"
+
+
+async def normalize_query(llm: LLMClient, message: str, history: str | None = None) -> NormalizedQuery:
+    """LLM errors other than bad output (rate limit, outage) propagate to the caller.
+
+    `history` (follow-up mode) is a <conversation_history> block placed before the message; it adds the
+    follow-up instructions to the prompt and the followup_intent / referenced_turns keys to the output."""
     message = normalize_text(message)
+    system = load_prompt("normalize")
+    user = with_hints(message)
+    if history:
+        system += "\n\n" + load_prompt("followup_normalize")
+        user = f"{history}\n\n{FOLLOWUP_MESSAGE_HEADER}\n{user}"
     try:
         result = await llm.complete_json(
-            load_prompt("normalize"),
-            with_hints(message),
+            system,
+            user,
             NormalizeOutput,
             temperature=0.0,
-            max_tokens=700,
+            max_tokens=800 if history else 700,
             purpose="normalize",
         )
     except LLMBadOutput as exc:
@@ -63,4 +76,6 @@ async def normalize_query(llm: LLMClient, message: str) -> NormalizedQuery:
         clarification_question=out.clarification_question if clarify else None,
         llm_ok=True,
         extra_queries=extras[:MAX_EXTRA_QUERIES],
+        followup_intent=out.followup_intent if history else None,
+        referenced_turns=list(out.referenced_turns) if history else [],
     )

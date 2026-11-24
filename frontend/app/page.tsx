@@ -24,6 +24,12 @@ interface Turn {
   error?: string;
 }
 
+/** The backend conversation this chat belongs to; follow-up questions are answered in its context. */
+interface ConversationRef {
+  id: string;
+  token: string;
+}
+
 const STATUS_ANNOUNCE: Record<ChatResponse["status"], string> = {
   answered: "উত্তর পাওয়া গেছে",
   partial: "আংশিক যাচাই করা উত্তর",
@@ -33,6 +39,8 @@ const STATUS_ANNOUNCE: Record<ChatResponse["status"], string> = {
 
 export default function ChatPage() {
   const [turns, setTurns] = useState<Turn[]>([]); // session memory only — nothing is stored
+  // follow-up mode: kept for this page only (a reload or "new conversation" starts afresh)
+  const conversation = useRef<ConversationRef | null>(null);
   const [input, setInput] = useState("");
   const [source, setSource] = useState<SourceView | null>(null);
   const [announce, setAnnounce] = useState("");
@@ -101,12 +109,24 @@ export default function ChatPage() {
   const run = useCallback(async (id: number, question: string, docId?: string) => {
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "loading", error: undefined } : t)));
     try {
-      const response = await askQuestion({ message: question, debug, user_doc_id: docId });
+      const conv = conversation.current;
+      const response = await askQuestion({
+        message: question,
+        debug,
+        user_doc_id: docId,
+        conversation_id: conv?.id,
+        conversation_token: conv?.token,
+      });
+      if (response.conversation_id && response.conversation_token) {
+        conversation.current = { id: response.conversation_id, token: response.conversation_token };
+      }
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "done", response } : t)));
       setAnnounce(`${STATUS_ANNOUNCE[response.status]}। ${response.answer}`);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "কিছু একটা সমস্যা হয়েছে। আবার চেষ্টা করুন।";
       if (err instanceof ApiError && err.code === "user_doc_expired") setDoc(null);
+      // expired or unknown conversation: forget it, so "retry" asks again as a new conversation
+      if (err instanceof ApiError && err.code === "conversation_expired") conversation.current = null;
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, state: "error", error: message } : t)));
       setAnnounce(message);
     }
@@ -140,6 +160,7 @@ export default function ChatPage() {
 
   const newChat = () => {
     if (busy) return;
+    conversation.current = null;
     setTurns([]);
     setInput("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -234,7 +255,7 @@ export default function ChatPage() {
               disabled={busy}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-sm font-medium shadow-card transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-60"
             >
-              <MessageSquarePlus className="size-4" aria-hidden /> নতুন প্রশ্ন
+              <MessageSquarePlus className="size-4" aria-hidden /> নতুন কথোপকথন
             </button>
           </div>
           {turns.map((turn) => (

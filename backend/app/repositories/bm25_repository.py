@@ -64,6 +64,16 @@ class BM25Index:
         chunks = {cid: ChunkRecord(**c) for cid, c in data["chunks"].items()}
         return cls(data["chunk_ids"], data["bm25"], chunks)
 
+    def shared_term_weight(self, query: str, chunk_id: str, min_idf: float) -> float:
+        """Sum of the IDF of query terms that also occur in the chunk, counting only distinctive terms
+        (IDF >= min_idf, i.e. not words found in a large share of all chunks). 0.0 = no meaningful overlap."""
+        chunk = self.chunks.get(chunk_id)
+        if chunk is None:
+            return 0.0
+        shared = set(tokenize(query)) & set(tokenize(chunk.normalized_text))
+        idf = self.bm25.idf
+        return float(sum(w for t in shared if (w := idf.get(t, 0.0)) >= min_idf))
+
     def search(self, query: str, top_k: int, area: str | None = None) -> list[SparseHit]:
         tokens = tokenize(query)
         if not tokens:

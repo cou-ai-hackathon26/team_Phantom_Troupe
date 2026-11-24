@@ -4,7 +4,14 @@ import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { areaLabel } from "@/lib/areas";
 import { formatMs, formatScore, toBnDigits } from "@/lib/bn";
-import type { ChatResponse } from "@/lib/types";
+import type { ChatResponse, FollowupIntent } from "@/lib/types";
+
+const FOLLOWUP_LABEL: Record<FollowupIntent, string> = {
+  CONTINUE: "আগের প্রশ্নের ধারাবাহিকতা — আগের সূত্র যাচাই করে আবার ব্যবহার",
+  EXPAND: "আগের বিষয়ে নতুন তথ্য — আগের সূত্র যাচাই ও নতুন খোঁজ",
+  NEW_TOPIC: "নতুন বিষয় — আগের সূত্র ব্যবহার হয়নি",
+  CLARIFY: "কোন বিষয়ের কথা, তা স্পষ্ট নয় — প্রশ্ন করা হয়েছে",
+};
 
 const GATE_LABEL: Record<string, string> = {
   answered: "উত্তর তৈরি ও যাচাই সম্পন্ন",
@@ -55,6 +62,16 @@ export function TracePanel({ response }: { response: ChatResponse }) {
               {response.cached && " (ক্যাশ)"}
             </dd>
           </div>
+          {trace.followup_intent && (
+            <div className="sm:col-span-2">
+              <dt className="text-sm text-muted-foreground">ফলো-আপ প্রশ্ন</dt>
+              <dd>
+                {FOLLOWUP_LABEL[trace.followup_intent]}
+                {(trace.reused_chunk_ids?.length ?? 0) > 0 &&
+                  ` · আবার ব্যবহৃত সূত্র: ${toBnDigits(trace.reused_chunk_ids?.length ?? 0)}টি`}
+              </dd>
+            </div>
+          )}
         </dl>
         {trace.candidates.length > 0 && (
           <div className="-mx-4 overflow-x-auto px-4">
