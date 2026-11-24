@@ -81,6 +81,58 @@ export interface ChatResponse {
   /** Only in the first response of a conversation: keep it with conversation_id for the follow-ups. */
   conversation_token?: string | null;
   turn_id?: string | null;
+  /** Official-source disagreements found in this answer's sources (absent when the check is switched off). */
+  conflict_analysis?: ConflictAnalysis | null;
+}
+
+export type ConflictStatus =
+  | "NO_CONFLICT"
+  | "DIRECT_CONFLICT"
+  | "TEMPORAL_DIFFERENCE"
+  | "CONTEXT_DIFFERENCE"
+  | "POSSIBLE_CONFLICT"
+  | "INSUFFICIENT_EVIDENCE"
+  | "RESOLVED";
+
+export type ConflictResolution =
+  | "RESOLVED_BY_EXPLICIT_SUPERSESSION"
+  | "RESOLVED_BY_SOURCE_STATUS"
+  | "RESOLVED_BY_APPLICABILITY"
+  | "UNRESOLVED_OFFICIAL_DISAGREEMENT"
+  | "UNRESOLVED_INSUFFICIENT_METADATA";
+
+export interface ConflictSource {
+  value: string;
+  marker: number | null;
+  chunk_id: string;
+  document_id: string;
+  title: string;
+  source_type: string;
+  source_type_label: string;
+  /** Year printed in the document title (not an effective date); null when unknown. */
+  title_year: number | null;
+  status: "repealed" | "unknown";
+  quote: string;
+}
+
+export interface ConflictItem {
+  id: string;
+  claim_type: "fee" | "processing_time" | "eligibility" | "validity_period" | "required_document";
+  category: string;
+  topic: string;
+  status: ConflictStatus;
+  resolution: ConflictResolution | null;
+  reason: string;
+  controlling_chunk_id: string | null;
+  judged_by: "rules" | "rules+llm";
+  disclosed: boolean;
+  sources: ConflictSource[];
+}
+
+export interface ConflictAnalysis {
+  status: "none" | "resolved" | "unresolved" | "insufficient_evidence";
+  claims_checked: number;
+  items: ConflictItem[];
 }
 
 export interface ApiErrorDetail {

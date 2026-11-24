@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.core.constants import Area, Status
+from app.schemas.conflict import ConflictAnalysis
 
 
 class ChatRequest(BaseModel):
@@ -68,6 +69,7 @@ class ChatResponse(BaseModel):
     conversation_id: str | None = None  # send back with the next message of this chat
     conversation_token: str | None = None  # only in the first response of a conversation; keep it with the id
     turn_id: str | None = None  # this assistant turn
+    conflict_analysis: ConflictAnalysis | None = None  # official-source disagreements found in this answer's sources
 
 
 class ErrorDetail(BaseModel):

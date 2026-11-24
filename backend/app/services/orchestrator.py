@@ -13,6 +13,7 @@ local; judging "enough evidence" would need a third LLM call). Follow-ups never 
 cache, because the cache key cannot see the conversation.
 """
 
+import logging
 import time
 from dataclasses import dataclass, field
 
@@ -20,10 +21,12 @@ from app.core.config import settings
 from app.core.constants import REFUSAL_TEXT
 from app.models.llm_client import LLMBadOutput, LLMClient
 from app.schemas.chat import ChatRequest, ChatResponse, Trace, TraceCandidate
+from app.schemas.conflict import ConflictAnalysis
 from app.schemas.conversation import FollowupResolution
 from app.schemas.ingestion import ChunkRecord
 from app.services.answer_cache import AnswerCache, cache_key
 from app.services.citation_validator import validate_answer
+from app.services.conflict_disclosure import ConflictRun, failed_analysis, finalize, prepare
 from app.services.evidence import ReuseReport, merge_evidence, retrieval_method, reusable_sources
 from app.services.followup_resolver import (
     TurnContext,
@@ -45,6 +48,8 @@ from app.services.retrieval_service import RetrievalResult, Retriever, merge_res
 from app.services.trust_policy import Gate, pre_retrieval_gate, retrieval_gate
 from app.services.user_docs import UserDocStore, get_user_doc_store
 from app.services.web_search import WebSearchClient
+
+logger = logging.getLogger(__name__)
 
 OFFICIAL_CHUNKS_WITH_USER_DOC = 3  # keep the prompt within free-tier token limits
 OFFICIAL_CHUNKS_WITH_WEB = 3  # local chunks kept next to web passages (token budget)
@@ -182,10 +187,15 @@ class Orchestrator:
             for passage in web_passages:
                 run.evidence[passage.id] = ("web", len(run.evidence) + 1)
 
-        # ---- Call 2: grounded answer, then validation in code
+        # ---- conflict check on the evidence (rules, no LLM), then Call 2 with its brief
+        conflicts = self._conflict_run(labelled, run)
         try:
             result = await generate_answer(
-                self.llm, run.normalized, labelled, self._followup_prompt(request, run, context)
+                self.llm,
+                run.normalized,
+                labelled,
+                self._followup_prompt(request, run, context),
+                conflict_brief=conflicts.brief if conflicts else None,
             )
         except LLMBadOutput:
             run.llm_calls += 1
@@ -202,21 +212,42 @@ class Orchestrator:
                 raw_key=raw_key,
                 norm_key=norm_key,
             )
+        answer, citations, warnings = validation.answer, validation.citations, list(validation.warnings)
+        analysis: ConflictAnalysis | None = None
+        if settings.conflict_detection:
+            analysis = failed_analysis()
+            if conflicts is not None:
+                try:
+                    disclosure = finalize(conflicts, result.data, answer, citations)
+                    answer, citations, analysis = disclosure.answer, disclosure.citations, disclosure.analysis
+                    warnings += disclosure.warnings
+                except Exception as exc:  # noqa: BLE001 - never fail the answer; report "insufficient evidence"
+                    logger.warning("conflict finalize failed", extra={"data": {"error": type(exc).__name__}})
         response = await self._finish(
             request,
             run,
             "answered",
             validation.status,
-            validation.answer,
-            citations=validation.citations,
-            warnings=validation.warnings
-            + ([WEB_WARNING] if any(c.kind == "web" for c in validation.citations) else []),
+            answer,
+            citations=citations,
+            warnings=warnings + ([WEB_WARNING] if any(c.kind == "web" for c in citations) else []),
             raw_key=raw_key,
             norm_key=norm_key,
+            conflict_analysis=analysis,
         )
         return response
 
     # ------------------------------------------------------------------ helpers
+    def _conflict_run(self, labelled: dict, run: _Run) -> ConflictRun | None:
+        """Claims + rule-based conflict pairs for the passages Call 2 will see. None if off or it failed."""
+        if not settings.conflict_detection:
+            return None
+        try:
+            return prepare(labelled, run.normalized, self.retriever.programmes())
+        except Exception as exc:  # noqa: BLE001 - the answer goes on; the analysis reports insufficient evidence
+            logger.warning("conflict check failed", extra={"data": {"error": type(exc).__name__}})
+            return None
+
     def _reusable_evidence(self, run: _Run, context: TurnContext) -> list[ChunkRecord]:
         """CONTINUE/EXPAND: the referenced turns' cited chunks, reloaded from the live index and re-verified."""
         res = run.resolution
@@ -302,6 +333,7 @@ class Orchestrator:
         warnings: list[str] | None = None,
         raw_key: str | None = None,
         norm_key: str | None = None,
+        conflict_analysis: ConflictAnalysis | None = None,
     ) -> ChatResponse:
         run.gate = gate
         latency_ms = int((time.perf_counter() - run.started) * 1000)
@@ -316,6 +348,7 @@ class Orchestrator:
             trace=trace if request.debug else None,
             latency_ms=latency_ms,
             cached=False,
+            conflict_analysis=conflict_analysis,
         )
         # cache the full response (incl. trace) so a cached answer can still show "how it was found"
         cacheable = response.model_dump(exclude={"latency_ms", "cached", "request_id"}) | {"trace": trace.model_dump()}

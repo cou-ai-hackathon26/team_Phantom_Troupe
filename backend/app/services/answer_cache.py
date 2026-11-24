@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 # Bump when retrieval or validation changes what an answer would be. Prompt edits are picked up automatically.
-PIPELINE_VERSION = "2026-11-23"
+PIPELINE_VERSION = "2026-11-24"  # conflict detection
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
 

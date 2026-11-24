@@ -388,6 +388,23 @@ Last, in this order:
 
 **Cost:** follow-ups are never cached, and their Call 1 carries the history (≈+300 tokens). Personal-document answers are not kept in the conversation (text dropped, `[U…]` citations never stored).
 
+
+## Phase 17 — Official-source conflict detection (added 24 Nov, judges' request)
+
+**Goal:** when retrieved official documents disagree about the same service (fees, amounts, ages, time limits, required papers), the answer discloses the disagreement with both citations instead of silently choosing one; a disagreement is resolved only by verifiable evidence. Spec: `adhikarai_official_source_conflict_detection.md`. Branch `feature/conflict-detection`.
+
+- [x] 17.1 `services/source_profile.py`: source type from the dataset step/parser and title words (never the domain), year printed in the title (publication hint only; none for compiled guides and webpages), `[রহিত]` → repealed, otherwise status `unknown` (never "active"), amendment act ↔ amended act by title. No effective dates, supersession records or verified dates exist in the data: they stay unknown
+- [x] 17.2 `services/claim_extractor.py` (no LLM): fees/allowance amounts/tax/fines/income limits (N টাকা), time limits (working vs calendar days), ages, validity, with exact sentence, chunk id, context (applicant, variant, place, programme, period, min/max, conditions). Budgets (কোটি), prison terms, digit soup and space-split digits ("৭০ ০ টাকা" in compiled guides) are excluded or low confidence; past-tense statements ("ছিল", "প্রাথমিকভাবে") and a year just before a line break give the period
+- [x] 17.3 `services/conflict_detector.py`: compare only same category, different documents, same programme or a category the question asks about; NO_CONFLICT / TEMPORAL / CONTEXT / POSSIBLE / DIRECT by rules; resolution only RESOLVED_BY_SOURCE_STATUS (repealed side), RESOLVED_BY_EXPLICIT_SUPERSESSION (amendment act, direct conflicts only), RESOLVED_BY_APPLICABILITY; else UNRESOLVED_OFFICIAL_DISAGREEMENT / UNRESOLVED_INSUFFICIENT_METADATA. A later title year is recorded as "not proof"
+- [x] 17.4 `services/conflict_disclosure.py` + `prompts/conflict_answer.md`: Call 2 gets a `<conflict_check>` brief and returns `conflict_judgments` (POSSIBLE → DIRECT on "same"; → context difference only with a difference quote found in a passage) and, for paperwork questions, `document_claims` kept only if the quote is in the passage. Disclosure guard: an answer that states one side of an unresolved disagreement gets a fixed notice with both values verbatim and both citations; a repealed/amended value gets the controlling value. Still 2 LLM calls; analysis recomputed per question, nothing stored; failures → `insufficient_evidence`, the answer goes on
+- [x] 17.5 `prompts/answer_bn.md` rule 9 no longer says "use the newer document" (contradicted the spec): give both values with labels. Cache invalidated (`PIPELINE_VERSION` 2026-11-24): run `warmup.py` again
+- [x] 17.6 API `conflict_analysis` (optional); frontend `ConflictNotice` (icon + text heading, values, source type, title year only when known, "রহিত"/"প্রযোজ্য" text badges, clickable citations); normal answers unchanged
+- [x] 17.7 31 tests (`tests/unit/test_conflicts.py`): the 15 unit cases of spec §14.1, extraction/profile cases, and orchestrator integration (one-sided answer gets both sides, both-sided answer untouched, repealed side, no-conflict question unchanged, personal document never compared, switch off and failure, document claims)
+- [x] 17.8 `scripts/scan_conflicts.py` (no LLM) on 11 probe questions + gold.jsonl: first run flagged 3 historical figures (১৯৯৭-৯৮ ১০০ টাকা vs ২০২৬-২৭ ৭০০ টাকা) as conflicts → fixed (past tense, year before line break) → 3 temporal differences, 0 direct conflicts. No real same-context disagreement found yet, so the demo example is synthetic
+- [ ] 17.9 A human labels `data/evaluation/conflict_candidates.jsonl` (`human_label`), then `python scripts/scan_conflicts.py --metrics …` gives precision / recall / false-conflict rate
+
+**Limits:** regex extraction covers digits only (no amounts written in words, English-only acts partly); the context check is word-based; most real disagreements can only be shown as unresolved because effective dates and supersession links are not in the data.
+
 ---
 
 ## Risks and mitigations

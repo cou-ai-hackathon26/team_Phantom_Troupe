@@ -51,6 +51,7 @@ AdhikarAI gives general information, not legal advice.
 - **Web fallback** — when local evidence is weak, search limited to an allow-list of official government websites; web citations are marked "verify on the linked page".
 - **🔊 Read aloud** — ElevenLabs Bangla voice, streamed and cached; the browser's voice as fallback.
 - **📎 Personal documents** — PDF or photo, local OCR, kept in memory for one hour, cited separately as "আপনার নথি", never as law.
+- **⚖️ Conflicting official sources** — when the retrieved documents give different fees, amounts, ages, time limits or document requirements for the same case, the answer shows both values with both citations instead of silently picking one. A disagreement is resolved only by verifiable evidence (a repealed act, an amendment act that names the other); a later year alone never decides. Historical figures and different applicant groups are recognised as such.
 - **💬 Follow-up questions** — ask "তাহলে কোথায় অভিযোগ করব?" without repeating the story. Earlier sources are reloaded and re-checked (still present, unchanged, not repealed, relevant) before reuse, and each answer cites its own sources. Conversations stay in memory only (2 hours) and belong to the browser tab that started them.
 - **Source browser** (`/sources`), **admin panel** (`/admin`: upload, OCR, index, delete documents), **retrieval trace** (`/?debug`) and **👍/👎 feedback**.
 

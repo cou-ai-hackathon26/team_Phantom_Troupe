@@ -66,6 +66,7 @@ def build_user_message(
     question: str,
     labelled: dict,  # noqa: ANN001 - ChunkRecord | User/WebPassageSource
     followup: FollowupPrompt | None = None,
+    conflict_brief: str | None = None,
 ) -> str:
     official, personal, web = [], [], []
     for label, chunk in labelled.items():
@@ -90,6 +91,8 @@ def build_user_message(
         message += "\n\n<web_sources>\n" + "\n\n".join(web) + "\n</web_sources>"
     if personal:
         message += "\n\n<user_document>\n" + "\n\n".join(personal) + "\n</user_document>"
+    if conflict_brief:
+        message += "\n\n" + conflict_brief
     return message
 
 
@@ -98,6 +101,7 @@ async def generate_answer(
     question: str,
     labelled: dict,  # noqa: ANN001
     followup: FollowupPrompt | None = None,
+    conflict_brief: str | None = None,
 ) -> LLMResult[AnswerOutput]:
     kinds = {getattr(c, "kind", "official") for c in labelled.values()}
     system = load_prompt("answer_bn")
@@ -107,11 +111,13 @@ async def generate_answer(
         system += "\n\n" + load_prompt("answer_web")
     if "user" in kinds:
         system += "\n\n" + load_prompt("answer_user_doc")
+    if conflict_brief:
+        system += "\n\n" + load_prompt("conflict_answer")
     return await llm.complete_json(
         system,
-        build_user_message(question, labelled, followup),
+        build_user_message(question, labelled, followup, conflict_brief),
         AnswerOutput,
         temperature=0.1,
-        max_tokens=1200,
+        max_tokens=1700 if conflict_brief else 1200,  # judgements and document claims need room
         purpose="answer",
     )

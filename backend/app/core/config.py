@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     user_doc_ttl_minutes: int = 60
     user_doc_max_count: int = 200
 
+    # Official-source conflict detection (services/conflict_disclosure.py); false = answers exactly as before
+    conflict_detection: bool = True
+
     # Follow-up conversations: kept in this process's memory only (services/conversation_store.py).
     conversation_ttl_minutes: int = 120  # sliding: each answered turn extends it
     conversation_max_count: int = 1000  # oldest conversations are evicted beyond this

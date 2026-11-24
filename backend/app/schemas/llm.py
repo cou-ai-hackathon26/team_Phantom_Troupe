@@ -50,3 +50,12 @@ class AnswerOutput(BaseModel):
     answer: str = ""
     used_chunk_ids: list[str] = Field(default_factory=list)
     found: bool = False
+    # conflict check only (prompts/conflict_answer.md); items are validated one by one in conflict_disclosure,
+    # so a malformed item is dropped instead of failing the whole answer
+    conflict_judgments: list[dict] = Field(default_factory=list)
+    document_claims: list[dict] = Field(default_factory=list)
+
+    @field_validator("conflict_judgments", "document_claims", mode="before")
+    @classmethod
+    def _dict_items(cls, v: object) -> object:
+        return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []

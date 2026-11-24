@@ -9,6 +9,7 @@ import type { ChatResponse, Citation } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AssistantAvatar } from "./answer-states";
 import { AnswerText } from "./answer-text";
+import { ConflictNotice } from "./conflict-notice";
 import { ListenButton } from "./listen-button";
 import { StatusBadge } from "./status-badge";
 import { TracePanel } from "./trace-panel";
@@ -127,6 +128,10 @@ export function AnswerCard({ response, onCite }: AnswerCardProps) {
           </div>
         ) : (
           <AnswerText text={response.answer} citations={response.citations} onCite={onCite} />
+        )}
+
+        {!refused && (
+          <ConflictNotice analysis={response.conflict_analysis} citations={response.citations} onCite={onCite} />
         )}
 
         {response.warnings.length > 0 && (

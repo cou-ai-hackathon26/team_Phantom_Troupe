@@ -83,6 +83,23 @@ def _excerpt(text: str) -> str:
     return flat if len(flat) <= EXCERPT_CHARS else flat[:EXCERPT_CHARS].rsplit(" ", 1)[0] + " …"
 
 
+def citation_for(chunk: ChunkRecord, marker: int) -> Citation:
+    """Citation built from stored metadata (never from LLM text)."""
+    kind = getattr(chunk, "kind", "official")
+    return Citation(
+        marker=marker,
+        chunk_id=chunk.id,
+        act=chunk.act,
+        section=chunk.section,
+        title=chunk.title,
+        citation=chunk.citation,
+        excerpt=chunk.text[:1200] if kind in ("user", "web") else _excerpt(chunk.text),
+        source_url=chunk.source_url,
+        notes=chunk.notes,
+        kind=kind,
+    )
+
+
 def validate_answer(output: AnswerOutput, labelled: dict[str, ChunkRecord]) -> Validation:
     if not output.found or not output.answer.strip():
         return Validation("refused", "", reason="not_found")
@@ -137,23 +154,7 @@ def validate_answer(output: AnswerOutput, labelled: dict[str, ChunkRecord]) -> V
         status = "partial"
         warnings.append(NUMERIC_WARNING.format(numbers=", ".join(ascii_to_bn_digits(n) for n in unsupported)))
 
-    citations = [
-        Citation(
-            marker=marker_of[label],
-            chunk_id=labelled[label].id,
-            act=labelled[label].act,
-            section=labelled[label].section,
-            title=labelled[label].title,
-            citation=labelled[label].citation,
-            excerpt=labelled[label].text[:1200]
-            if getattr(labelled[label], "kind", "official") in ("user", "web")
-            else _excerpt(labelled[label].text),
-            source_url=labelled[label].source_url,
-            notes=labelled[label].notes,
-            kind=getattr(labelled[label], "kind", "official"),
-        )
-        for label in order
-    ]
+    citations = [citation_for(labelled[label], marker_of[label]) for label in order]
     return Validation(
         status=status,
         answer=answer,
