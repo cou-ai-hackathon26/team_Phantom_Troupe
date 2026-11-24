@@ -144,9 +144,6 @@ export function LoginForm({ onLogin }: { onLogin: (token: string, info: AdminInf
             {busy && <LoaderCircle className="size-4 animate-spin" aria-hidden />}
             {busy ? "যাচাই হচ্ছে…" : "প্রবেশ করুন"}
           </button>
-          <p className="text-center text-xs text-muted-foreground">
-            অ্যাকাউন্ট সার্ভারে <code className="rounded bg-secondary px-1">scripts/create_admin.py</code> দিয়ে তৈরি করা হয়।
-          </p>
         </form>
       </div>
     </main>
