@@ -79,6 +79,8 @@ data/index/
 data/parsed/
 data/ocr/
 data/tmp/
+# local copies of the Supabase database (contain admin password hashes; never commit)
+data/db_backup/
 data/evaluation/checkpoint*.jsonl
 data/evaluation/results/
 *.pkl
