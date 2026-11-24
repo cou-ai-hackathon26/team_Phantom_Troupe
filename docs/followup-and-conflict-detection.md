@@ -1,19 +1,39 @@
-# Follow-up conversations and official-source conflict detection
+# Follow-up Conversations and Official-Source Conflict Detection
 
-Two features added on 24 Nov 2026 at the judges' request (`plan.md` Phases 16 and 17):
+**AdhikarAI (অধিকারAI) · Technical design document**
 
-| Feature | The problem | What AdhikarAI does now |
+| | |
+|---|---|
+| Team | Phantom Troupe — CoU AI Hackathon 2026 |
+| Scope | Two capabilities added to the existing RAG assistant in response to the judges' brief |
+| Requirement specifications | [`docs/specs/followup-source-continuity.md`](specs/followup-source-continuity.md), [`docs/specs/official-source-conflict-detection.md`](specs/official-source-conflict-detection.md) |
+| Status | Implemented, tested and merged into `master` (build plan: `plan.md`, Phases 16 and 17) |
+| Related documents | [`README.md`](../README.md) · [`docs/pipeline.md`](pipeline.md) (base architecture) · [`docs/demo_script.md`](demo_script.md) |
+
+## Executive summary
+
+| Capability | Problem | Outcome |
 |---|---|---|
-| **Follow-up conversations with source continuity** | A citizen had to repeat the whole story for every question ("তাহলে কোথায় অভিযোগ করব?" meant nothing on its own). | The assistant keeps the conversation, understands what "তাহলে / এটার / ওই আইন" refer to, reloads and re-checks the sources it cited before, and cites fresh sources for the new answer. |
-| **Official-source conflict detection** | When two official documents gave different figures, the model silently picked one (the old prompt even said "use the newer document"). | Code finds disagreements in the retrieved passages, settles them only with verifiable evidence, and otherwise shows both values with both citations and a "confirm with the office" step. |
+| **Follow-up conversations with source continuity** | Every question was answered in isolation, so a citizen had to repeat the whole situation; "তাহলে কোথায় অভিযোগ করব?" meant nothing on its own. | The assistant keeps the conversation, resolves references such as "তাহলে / এটার / ওই আইন", reloads and re-verifies the sources it cited earlier, and cites the evidence of each new answer. |
+| **Official-source conflict detection and transparency** | When two official documents gave different figures, the model silently picked one (the previous prompt even said "use the newer document"). | Deterministic code finds disagreements in the retrieved evidence and settles them only with verifiable evidence; otherwise the answer shows both values with both citations and advises confirming with the responsible office. |
 
-Both are built into the existing pipeline, not beside it: one `/chat` endpoint, still **at most 2 LLM calls per question**, no new database or infrastructure, and every answer still passes the existing citation validator.
+Both are integrated into the existing pipeline rather than built beside it: the same `/chat` endpoint, **at most two LLM calls per question**, no new database or infrastructure, and every answer still passes the existing citation validator. Backward compatibility is preserved: clients that send no conversation fields behave exactly as before.
 
-Guiding rules:
+Design principles:
 
-> The conversation gives context. The cited source gives evidence. A follow-up must re-check that its evidence still supports the new question.
+> The conversation gives context. The cited source gives evidence. A follow-up must re-verify that its evidence still supports the new question.
 >
 > When official sources disagree, AdhikarAI communicates the disagreement; it does not manufacture certainty.
+
+## Contents
+
+1. [The pipeline: before and after](#1-the-pipeline-before-and-after)
+2. [Follow-up conversations with source continuity](#2-feature-1--follow-up-conversations-with-source-continuity)
+3. [Official-source conflict detection](#3-feature-2--official-source-conflict-detection)
+4. [Testing and results](#4-testing-and-results)
+5. [Configuration](#5-configuration)
+6. [Known limitations](#6-known-limitations)
+7. [Reproducing the results](#7-reproducing-the-results)
 
 ---
 
@@ -265,9 +285,14 @@ LLM, Qdrant and the database are mocked; fixture text is synthetic. Coverage:
 
 Every answered turn used exactly 2 LLM calls; clarifications used 1. Uncached latency was 7–55 s, mostly waiting out Groq's per-minute token limit.
 
-The first live run found two defects, both fixed and re-run (steps 5 and 6 above are the re-run):
-- step 5 asked "wage complaint or old-age allowance?" although "এটার" means the topic just discussed → `followup_normalize.md` now says "এটা / এটার / এর / তাহলে" point to the most recent turn; CLARIFY is for "ওটা / সেটা / আগেরটা" with several candidates;
-- step 6 was refused with the helpline text instead of asked, because the pre-retrieval gate checks scope before clarification → a follow-up CLARIFY is now marked in scope (regression test added).
+#### Issues found during validation
+
+The first live run exposed two defects. Both were fixed, covered by tests and re-run; steps 5 and 6 above show the re-run.
+
+| Observed | Root cause | Fix |
+|---|---|---|
+| Step 5 asked "wage complaint or old-age allowance?" instead of answering | The prompt did not distinguish proximal references ("এটা", "এটার" = the topic just discussed) from distal ones ("ওটা", "সেটা") | `prompts/followup_normalize.md`: proximal references point to the most recent turn; CLARIFY only for distal references with several candidates |
+| Step 6 returned the helpline refusal instead of a clarification question | The existing pre-retrieval gate checks scope before clarification, and a bare "ওটা কি করা যাবে?" looks out of scope | `followup_resolver.apply_resolution` marks a follow-up CLARIFY as in scope (regression test added) |
 
 ### 4.4 Real-corpus scan for conflicts (no LLM)
 
@@ -294,4 +319,27 @@ The first live run found two defects, both fixed and re-run (steps 5 and 6 above
 - Claim extraction covers amounts written in digits (not in words) and is weaker on English-only acts; the context check is word-based.
 - The data has no effective dates or supersession links, so most real disagreements can only be shown as unresolved.
 - The scan of the real corpus found no same-context disagreement yet; the unresolved example above is synthetic. `data/evaluation/conflict_candidates.jsonl` waits for human labels before precision and recall can be reported.
-- Changing `prompts/answer_bn.md` invalidated the answer cache: run `python scripts/warmup.py` before the demo.
+- Operational note: the conflict-aware rule in `prompts/answer_bn.md` changed the answer-cache fingerprint, so run `python scripts/warmup.py` once before a demo to re-warm the cache.
+
+## 7. Reproducing the results
+
+```bash
+cd backend && source .venv/bin/activate
+
+# automated tests (LLM, Qdrant and database mocked)
+pytest tests/unit/test_followup.py tests/unit/test_conflicts.py tests/unit/test_llm_retry.py
+pytest                                                   # full suite
+
+# candidate conflicts in the real corpus (no LLM calls)
+python scripts/scan_conflicts.py --mode hybrid
+python scripts/scan_conflicts.py --metrics data/evaluation/conflict_candidates.jsonl   # after human labelling
+
+# live: start the API, then ask a question and a follow-up with the returned ids
+uvicorn app.main:app --port 8000
+curl -s localhost:8000/api/v1/chat -H 'content-type: application/json' \
+  -d '{"message": "আমার মালিক তিন মাস ধরে বেতন দিচ্ছে না।", "debug": true}'
+curl -s localhost:8000/api/v1/chat -H 'content-type: application/json' \
+  -d '{"message": "তাহলে আমি কোথায় অভিযোগ করব?", "debug": true, "conversation_id": "<id>", "conversation_token": "<token>"}'
+```
+
+In the web UI, open `http://localhost:3000/?debug` to see the follow-up decision and the reused sources under "এই উত্তর কীভাবে পাওয়া গেল". A disclosed disagreement appears as the "সরকারি নথিতে ভিন্ন তথ্য" box in the answer card; the full analysis is the `conflict_analysis` field of the API response.

@@ -375,7 +375,7 @@ Last, in this order:
 
 ## Phase 16 — Follow-up questions with source continuity (added 24 Nov, judges' request)
 
-**Goal:** a citizen can ask a follow-up ("তাহলে আমি কোথায় অভিযোগ করব?") without repeating the context; an earlier cited source is reused only after it is reloaded and re-checked, and every answer cites its own sources. Spec: `adhikarai_followup_source_continuity.md`. Branch `feature/followup-conversation`.
+**Goal:** a citizen can ask a follow-up ("তাহলে আমি কোথায় অভিযোগ করব?") without repeating the context; an earlier cited source is reused only after it is reloaded and re-checked, and every answer cites its own sources. Spec: `docs/specs/followup-source-continuity.md`. Branch `feature/followup-conversation`.
 
 - [x] 16.1 `services/conversation_store.py`: conversations in process memory only (TTL `CONVERSATION_TTL_MINUTES`, max `CONVERSATION_MAX_COUNT`), behind a `ConversationStore` interface. Ownership by a random per-conversation secret token (SHA-256 stored, constant-time check; wrong token = unknown id = 404). One message at a time per conversation (409). Turns appended in pairs only after a complete answer; each assistant turn keeps its citation → canonical chunk id, document id, content hash, retrieval method, rank
 - [x] 16.2 Resolver folded into Call 1 (still ≤2 LLM calls): with history, `prompts/followup_normalize.md` + the last 3 exchanges (questions and cited source titles, no answer prose) give `followup_intent` (CONTINUE / EXPAND / NEW_TOPIC / CLARIFY) and `referenced_turns`; `services/followup_resolver.py` validates them (only shown labels, unknown intent or Call 1 fallback → fresh retrieval, CLARIFY without a question → fresh retrieval)
@@ -392,7 +392,7 @@ Last, in this order:
 
 ## Phase 17 — Official-source conflict detection (added 24 Nov, judges' request)
 
-**Goal:** when retrieved official documents disagree about the same service (fees, amounts, ages, time limits, required papers), the answer discloses the disagreement with both citations instead of silently choosing one; a disagreement is resolved only by verifiable evidence. Spec: `adhikarai_official_source_conflict_detection.md`. Branch `feature/conflict-detection`.
+**Goal:** when retrieved official documents disagree about the same service (fees, amounts, ages, time limits, required papers), the answer discloses the disagreement with both citations instead of silently choosing one; a disagreement is resolved only by verifiable evidence. Spec: `docs/specs/official-source-conflict-detection.md`. Branch `feature/conflict-detection`.
 
 - [x] 17.1 `services/source_profile.py`: source type from the dataset step/parser and title words (never the domain), year printed in the title (publication hint only; none for compiled guides and webpages), `[রহিত]` → repealed, otherwise status `unknown` (never "active"), amendment act ↔ amended act by title. No effective dates, supersession records or verified dates exist in the data: they stay unknown
 - [x] 17.2 `services/claim_extractor.py` (no LLM): fees/allowance amounts/tax/fines/income limits (N টাকা), time limits (working vs calendar days), ages, validity, with exact sentence, chunk id, context (applicant, variant, place, programme, period, min/max, conditions). Budgets (কোটি), prison terms, digit soup and space-split digits ("৭০ ০ টাকা" in compiled guides) are excluded or low confidence; past-tense statements ("ছিল", "প্রাথমিকভাবে") and a year just before a line break give the period

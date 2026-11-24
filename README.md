@@ -17,7 +17,15 @@
 - Nahiyan Noor
 - Jihad Mia
 
-More detail: build plan and progress in [`plan.md`](plan.md), the architecture spec in [`docs/pipeline.md`](docs/pipeline.md), the demo in [`docs/demo_script.md`](docs/demo_script.md).
+More detail:
+
+| Document | Contents |
+|---|---|
+| [`docs/pipeline.md`](docs/pipeline.md) | Architecture specification of the base RAG pipeline |
+| [`docs/followup-and-conflict-detection.md`](docs/followup-and-conflict-detection.md) | Design, engineering approach and test results of follow-up conversations and official-source conflict detection |
+| [`docs/specs/`](docs/specs/) | The judges' requirement specifications for those two features |
+| [`docs/demo_script.md`](docs/demo_script.md) | Demo walkthrough |
+| [`plan.md`](plan.md) | Build plan and progress, phase by phase |
 
 ## Problem
 
