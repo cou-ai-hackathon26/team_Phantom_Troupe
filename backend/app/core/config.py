@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_timeout_s: float = 20.0
     llm_max_retries: int = 3
+    llm_rate_limit_max_wait_s: float = 20.0  # longest single wait on a 429 (Groq retry-after), per retry
     stt_model: str = "whisper-large-v3"
 
     # Embeddings (local)

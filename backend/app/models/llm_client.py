@@ -98,6 +98,21 @@ def _retry_after_seconds(exc: Exception) -> float | None:
         return None
 
 
+RETRY_MAX_WAIT_S = 8.0  # outages and timeouts: short waits
+
+
+def retry_delay(exc: Exception, attempt: int) -> float:
+    """Seconds to wait before retry `attempt` (1-based). A 429 on the free tier is a per-minute token limit:
+    Groq's retry-after says when enough tokens are free again, so it is honoured up to
+    LLM_RATE_LIMIT_MAX_WAIT_S (a follow-up asked right after an answer otherwise gave up inside the same
+    minute). Other errors keep short exponential backoff."""
+    backoff = float(2 ** (attempt - 1))
+    if isinstance(exc, groq.RateLimitError):
+        cap = settings.llm_rate_limit_max_wait_s
+        return min(_retry_after_seconds(exc) or backoff * 2, cap)
+    return min(_retry_after_seconds(exc) or backoff, RETRY_MAX_WAIT_S)
+
+
 class LLMClient:
     def __init__(self, client: AsyncGroq | None = None, model: str | None = None) -> None:
         self._client = client
@@ -148,7 +163,7 @@ class LLMClient:
                     if isinstance(exc, groq.RateLimitError):
                         raise LLMRateLimited("Groq rate limit reached") from exc
                     raise LLMError(f"Groq unavailable: {type(exc).__name__}") from exc
-                delay = min(_retry_after_seconds(exc) or 2 ** (attempt - 1), 8.0)
+                delay = retry_delay(exc, attempt)
                 logger.info("llm retry", extra={"data": {"purpose": purpose, "attempt": attempt, "delay_s": delay}})
                 await asyncio.sleep(delay)
             except groq.APIStatusError as exc:  # 400 etc. — not retryable
