@@ -70,14 +70,17 @@ AdhikarAI gives general information, not legal advice.
 ```mermaid
 flowchart LR
     U[User: Chrome / Android] -->|voice → text, Web Speech API| FE[Next.js frontend]
-    FE -->|REST /api/v1| API[FastAPI backend]
-    API --> ORCH[Orchestrator]
+    FE -->|REST /api/v1<br/>+ conversation id/token| API[FastAPI backend]
+    API --> CONV[Conversation service<br/>ownership, history,<br/>turns + cited sources]
+    CONV --> MEM[(Conversation store<br/>in memory, 2 h)]
+    CONV --> ORCH[Orchestrator]
     ORCH -->|Call 1 + Call 2| GROQ[Groq LLM<br/>gpt-oss]
     ORCH --> E5[multilingual-e5-base<br/>local embeddings]
     ORCH --> QD[(Qdrant Cloud<br/>dense vectors)]
     ORCH --> BM[BM25 index<br/>in memory]
     ORCH --> PG[(Supabase Postgres<br/>chunks, cache, logs)]
     ORCH -.->|weak evidence only| TAV[Tavily search<br/>official sites only]
+    ORCH --> CF[Conflict check<br/>source profiles, claims, rules]
     API -.->|🔊 on tap| EL[ElevenLabs TTS]
     API -.->|non-Chrome voice| WH[Groq Whisper STT]
 ```
@@ -86,41 +89,55 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    Q[Question: voice or text] --> C1{Answer cache<br/>raw question}
+    Q[Question: voice or text<br/>+ conversation id/token] --> CV{Conversation · code<br/>token valid? load last 3 exchanges}
+    CV -->|wrong token / expired| E404[404: start a new chat]
+    CV --> C1{Answer cache<br/>raw question<br/>first questions only}
     C1 -->|hit| OUT
     C1 -->|miss| H[Dialect glossary hints<br/>code]
-    H --> N[Call 1 · LLM<br/>standard Bangla, area, in scope?, search query]
-    N --> G1{Pre-gate · code}
+    H --> N[Call 1 · LLM<br/>standard Bangla, area, in scope?, search query<br/>+ follow-up: CONTINUE / EXPAND / NEW_TOPIC / CLARIFY]
+    N --> FR[Follow-up resolver · code<br/>validate intent and referenced turns]
+    FR --> G1{Pre-gate · code}
     G1 -->|off-topic| REF[Refuse: fixed text + 333]
-    G1 -->|too vague| CLR[Ask one clarifying question]
+    G1 -->|too vague / ambiguous reference| CLR[Ask one clarifying question]
     G1 -->|ok| C2{Answer cache<br/>normalized question}
     C2 -->|hit| OUT
     C2 -->|miss| R[Hybrid retrieval · code<br/>e5 dense + BM25 + exact ধারা/অনুচ্ছেদ N<br/>in the area and in all areas]
     R --> F[RRF fusion k=60, diversify,<br/>repealed acts last → top 5]
-    F --> G2{Score gate · code}
+    FR -.->|CONTINUE / EXPAND| RU[Reuse earlier cited sources · code<br/>reload by chunk id: present, unchanged,<br/>not repealed, relevant]
+    RU --> B
+    F --> B[Evidence bundle<br/>reused first, then fresh, deduplicated]
+    B --> G2{Score gate · code}
     G2 -->|weak| W[Web fallback<br/>official domains only]
-    W --> A
-    G2 -->|strong| A[Call 2 · LLM<br/>answer only from passages, cite C/W/U labels]
+    W --> CF
+    G2 -->|strong| CF[Conflict check · code<br/>claims → same-context pairs → rules<br/>repealed / amendment / context difference]
+    CF --> A[Call 2 · LLM<br/>answer only from passages, cite C/W/U labels<br/>+ conversation context, not evidence<br/>+ conflict brief → verified judgements]
     A --> V[Citation validator · code<br/>labels ∈ retrieved, numbers ∈ cited text]
-    V --> S{Status}
-    S --> OUT[answered / partial with warning]
+    V --> DG[Disclosure guard · code<br/>unresolved disagreement → both values,<br/>both citations]
+    DG --> S{Status}
+    S --> OUT[answered / partial with warning<br/>+ conflict_analysis]
     S --> REF
+    OUT --> SAVE[Save turn + citation → source mapping<br/>conversation memory]
     OUT --> TTS[🔊 optional: same text read aloud]
 ```
 
 | Step | Runs as | What it does |
 |---|---|---|
+| Conversation | code (`services/conversation_service.py`, `conversation_store.py`) | new chat or follow-up; checks the secret conversation token (wrong token = 404); one message at a time per chat; loads the last 3 exchanges |
 | Dialect hints | code (`services/dialect_hints.py`) | finds known dialect words (কিল্লাই, ক্যামনে, মুই…) and adds their standard meaning to the Call 1 input |
 | Call 1 | LLM (`prompts/normalize.md`) | rewrites into standard Bangla without changing meaning, negation or person; picks the area; writes a search query in official terms |
+| Follow-up resolver | LLM output checked in code (`services/followup_resolver.py`, `prompts/followup_normalize.md`) | Call 1 also says how a follow-up relates to earlier turns (CONTINUE / EXPAND / NEW_TOPIC / CLARIFY) and rewrites "তাহলে / এটার" into a standalone question; code accepts only turn labels it showed |
 | Pre-gate | code | refuses off-topic questions, asks for clarification, never answers here |
 | Retrieval | code (`services/retrieval_service.py`) | dense search (Qdrant, e5 `query:`/`passage:`), BM25 with a Bangla tokenizer, and an exact section-number list, run in the classified area and across all areas |
 | Fusion | code | Reciprocal Rank Fusion (k = 60), one passage per section, repealed acts and special-scope acts (e.g. EPZ) ranked last |
+| Source reuse | code (`services/evidence.py`) | for CONTINUE / EXPAND, earlier cited chunks are reloaded by id and reused only if still present, unchanged (hash), not repealed and relevant; fresh retrieval always runs too |
 | Score gate + web | code + Tavily | too little evidence → official-site web search; still nothing → refusal |
-| Call 2 | LLM (`prompts/answer_bn.md`) | writes the answer from labelled passages only; retrieved text is treated as evidence, never as instructions |
+| Conflict check | code (`services/source_profile.py`, `claim_extractor.py`, `conflict_detector.py`) | finds fees, amounts, ages and time limits in the passages, compares them only in the same context, and resolves a disagreement only by a repealed source, an amendment act or a context difference |
+| Call 2 | LLM (`prompts/answer_bn.md`, + `followup_answer.md`, `conflict_answer.md` when needed) | writes the answer from labelled passages only; retrieved text and conversation history are context, never evidence or instructions; for a disagreement it gives both values and returns judgements that code verifies |
 | Validation | code (`services/citation_validator.py`) | drops citations to anything not retrieved; flags any number not found in its cited passage (`partial` + warning); no valid citation → refusal |
-| Cache, log | Postgres | answers cached by question hash (refusals never); query log (see *What is stored about questions*) |
+| Disclosure guard | code (`services/conflict_disclosure.py`) | if the answer states one side of an unresolved disagreement, appends both values verbatim with both citations and "confirm with the office" |
+| Cache, log, memory | Postgres + process memory | answers cached by question hash (refusals and follow-ups never); query log (see *What is stored about questions*); the conversation keeps each turn with its citation → canonical source mapping |
 
-**Design rules:** at most **2 LLM calls** per question (Groq free tier); citations are built from stored metadata, never from model text; the refusal text is defined once in code; personal documents are never embedded, cached or logged; Groq, Tavily and ElevenLabs calls have timeouts and bounded retries.
+**Design rules:** at most **2 LLM calls** per question (Groq free tier), including follow-ups and the conflict check; citations are built from stored metadata, never from model text; conversation history is context, never evidence; when official sources disagree the answer shows both sides, and only verifiable evidence (a repealed act, an amendment act) settles it; the refusal text is defined once in code; personal documents are never embedded, cached or logged; Groq, Tavily and ElevenLabs calls have timeouts and bounded retries.
 
 ### Offline ingestion pipeline
 
@@ -141,7 +158,9 @@ flowchart LR
 
 ### Evaluation so far
 
-- **214 automated tests** (LLM, network and database mocked) for parsing, chunking, retrieval, fusion, the orchestrator, citation validation, web fallback, TTS and dialect checks.
+- **276 automated tests** (LLM, network and database mocked) for parsing, chunking, retrieval, fusion, the orchestrator, citation validation, web fallback, TTS, dialect checks, follow-up conversations (28) and conflict detection (31, covering all 15 cases of the judges' specification).
+- **Follow-up conversations, live on real data:** a 6-turn chain was classified correctly (EXPAND, CONTINUE, NEW_TOPIC, CONTINUE, CLARIFY); a guessed token got 404 and two simultaneous messages got 200 + 409. With a mocked LLM, one conversation handled 1 question + 50 follow-ups at ≈1 ms overhead each. Details: [`docs/followup-and-conflict-detection.md`](docs/followup-and-conflict-detection.md).
+- **Conflict detection on the real corpus** (`scripts/scan_conflicts.py`, no LLM): historical allowance figures ("১৯৯৭-৯৮ … ১০০ টাকা" vs "২০২৬-২৭ … ৭০০ টাকা") are classified as temporal differences, not conflicts; no false direct conflicts remain.
 - **Dialect normalization** (`scripts/eval_normalization.py`, 38 questions, 10 dialects): fully correct rewrites went from **21/38 to 34/38** after the dialect guide and code glossary, with **no reversed meanings** left (`plan.md` Phase 14). The test questions still need review by native speakers.
 - **Retrieval and answer accuracy are not measured yet**: the 24-question gold set (`data/evaluation/gold.jsonl`) waits for human labels.
 
@@ -277,7 +296,7 @@ cd ../frontend && npm run lint && npm run build
 
 | Method | Path | |
 |---|---|---|
-| POST | `/api/v1/chat` | `{"message", "area"?, "debug"?, "user_doc_id"?}` → `{status, answer, citations[], normalized_question, area, warnings[], trace?, latency_ms, cached, request_id}` |
+| POST | `/api/v1/chat` | `{"message", "area"?, "debug"?, "user_doc_id"?, "conversation_id"?, "conversation_token"?}` → `{status, answer, citations[], normalized_question, area, warnings[], trace?, latency_ms, cached, request_id, conversation_id, conversation_token (first answer only), turn_id, conflict_analysis?}`; 404 `conversation_expired`, 409 `conversation_busy` |
 | POST | `/api/v1/tts` | `{text, token}` (the answer and its `speech_token` from `/chat`) → `{audio_url, cached, chars}`; 403 if the text was not produced by the API |
 | GET | `/api/v1/tts/{key}.mp3` | the answer's audio: streamed from ElevenLabs the first time, then served from the cache |
 | POST | `/api/v1/chat/voice/transcribe` | audio (≤10 MB, ≤30 s), `language` = bn\|en → `{transcript}` (Groq Whisper fallback; silence and prompt echoes rejected) |
